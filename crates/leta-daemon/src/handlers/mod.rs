@@ -4,6 +4,7 @@ mod graph;
 mod grep;
 mod index;
 mod insert;
+mod lines;
 mod refs;
 mod rename;
 mod replace;
@@ -28,6 +29,7 @@ pub use graph::handle_graph;
 pub use grep::{get_file_symbols, handle_grep, handle_grep_streaming};
 pub use index::handle_add_workspace;
 pub use insert::handle_insert;
+pub use lines::{handle_delete_lines, handle_insert_at_line, handle_replace_lines};
 pub use refs::{
     handle_declaration, handle_implementations, handle_references, handle_subtypes,
     handle_supertypes,

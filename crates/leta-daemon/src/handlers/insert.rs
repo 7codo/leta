@@ -23,10 +23,7 @@ pub async fn handle_insert(
         .ok_or_else(|| "Language server does not provide symbol ranges".to_string())?;
 
     if start_line == 0 || end_line < start_line {
-        return Err(format!(
-            "Invalid symbol range: {}-{}",
-            start_line, end_line
-        ));
+        return Err(format!("Invalid symbol range: {}-{}", start_line, end_line));
     }
 
     if params.new_text.trim().is_empty() {
@@ -221,14 +218,9 @@ mod tests {
     #[test]
     fn preserves_missing_trailing_newline() {
         let original = "def a():\n    return 1";
-        let (updated, _, _) = insert_relative_to_symbol(
-            original,
-            1,
-            2,
-            "def c(): pass",
-            InsertPosition::Before,
-        )
-        .unwrap();
+        let (updated, _, _) =
+            insert_relative_to_symbol(original, 1, 2, "def c(): pass", InsertPosition::Before)
+                .unwrap();
         assert_eq!(updated, "def c(): pass\ndef a():\n    return 1");
     }
 }

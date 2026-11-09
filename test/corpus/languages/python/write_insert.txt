@@ -1,5 +1,5 @@
 ===
-backup editable fixture (this file sorts last and restores it at the end)
+backup editable fixture (this file restores it at the end)
 ===
 cp editable.py editable.py.bak
 ---

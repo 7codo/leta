@@ -53,6 +53,10 @@ read from stdin or a file.
 Use `leta insert-before SYMBOL` or `leta insert-after SYMBOL` to add new
 definitions next to an existing symbol.
 
+Use `leta delete-lines PATH START [END]`, `leta insert-at-line PATH LINE`, and
+`leta replace-lines PATH START [END]` for edits by line number instead of
+symbol name.
+
 See `leta COMMAND --help` for more documentation and command-specific options."#;
 
 #[derive(Parser)]
@@ -148,7 +152,11 @@ enum Commands {
         include_path: Vec<String>,
         #[arg(long, help = "Include test files (excluded by default)")]
         include_tests: bool,
-        #[arg(long, default_value_t = 1, help = "Call tree depth from roots (0 = roots only, 1 = roots + direct callees)")]
+        #[arg(
+            long,
+            default_value_t = 1,
+            help = "Call tree depth from roots (0 = roots only, 1 = roots + direct callees)"
+        )]
         depth: u32,
         #[arg(long, help = "Show all depths (ignore --depth)")]
         all_depths: bool,
@@ -241,6 +249,56 @@ enum Commands {
         #[arg(help = "Symbol to insert after")]
         symbol: String,
         #[arg(long, help = "Text to insert (inline)")]
+        body: Option<String>,
+        #[arg(
+            long,
+            conflicts_with = "body",
+            help = "Read text from FILE ('-' reads stdin)"
+        )]
+        file: Option<String>,
+        #[arg(long, help = "Show what would change without writing")]
+        dry_run: bool,
+    },
+
+    #[command(about = "Delete a range of lines within a file.")]
+    DeleteLines {
+        #[arg(help = "File to edit")]
+        path: String,
+        #[arg(help = "First line to delete (1-based)")]
+        start: u32,
+        #[arg(help = "Last line to delete (defaults to START)")]
+        end: Option<u32>,
+        #[arg(long, help = "Show what would change without writing")]
+        dry_run: bool,
+    },
+
+    #[command(about = "Insert content at a given line in a file.")]
+    InsertAtLine {
+        #[arg(help = "File to edit")]
+        path: String,
+        #[arg(help = "Line to insert at (1-based)")]
+        line: u32,
+        #[arg(long, help = "Text to insert (inline)")]
+        body: Option<String>,
+        #[arg(
+            long,
+            conflicts_with = "body",
+            help = "Read text from FILE ('-' reads stdin)"
+        )]
+        file: Option<String>,
+        #[arg(long, help = "Show what would change without writing")]
+        dry_run: bool,
+    },
+
+    #[command(about = "Replace a range of lines within a file with new content.")]
+    ReplaceLines {
+        #[arg(help = "File to edit")]
+        path: String,
+        #[arg(help = "First line to replace (1-based)")]
+        start: u32,
+        #[arg(help = "Last line to replace (defaults to START)")]
+        end: Option<u32>,
+        #[arg(long, help = "Replacement text (inline)")]
         body: Option<String>,
         #[arg(
             long,
@@ -499,6 +557,40 @@ async fn main() -> Result<()> {
                         body,
                         file,
                         InsertPosition::After,
+                        dry_run,
+                    )
+                    .await
+                }
+                Commands::DeleteLines {
+                    path,
+                    start,
+                    end,
+                    dry_run,
+                } => handle_delete_lines(&config, cli.json, path, start, end, dry_run).await,
+                Commands::InsertAtLine {
+                    path,
+                    line,
+                    body,
+                    file,
+                    dry_run,
+                } => {
+                    handle_insert_at_line(&config, cli.json, path, line, body, file, dry_run).await
+                }
+                Commands::ReplaceLines {
+                    path,
+                    start,
+                    end,
+                    body,
+                    file,
+                    dry_run,
+                } => {
+                    handle_replace_lines(
+                        &config,
+                        cli.json,
+                        path,
+                        start..=end.unwrap_or(start),
+                        body,
+                        file,
                         dry_run,
                     )
                     .await
@@ -1699,8 +1791,9 @@ fn read_text_input(body: Option<String>, file: Option<String>) -> Result<String>
     match (body, file) {
         (Some(text), _) => Ok(text),
         (None, Some(path)) if path == "-" => read_text_from_stdin(),
-        (None, Some(path)) => std::fs::read_to_string(&path)
-            .map_err(|e| anyhow!("Failed to read {}: {}", path, e)),
+        (None, Some(path)) => {
+            std::fs::read_to_string(&path).map_err(|e| anyhow!("Failed to read {}: {}", path, e))
+        }
         (None, None) => read_text_from_stdin(),
     }
 }
@@ -1762,6 +1855,132 @@ async fn handle_insert(
         println!("{}", serde_json::to_string_pretty(&insert_result)?);
     } else {
         println!("{}", format_insert_result(&insert_result));
+    }
+    Ok(())
+}
+
+fn resolve_line_edit_target(config: &Config, path: &str) -> Result<(PathBuf, PathBuf)> {
+    let file_path = PathBuf::from(path)
+        .canonicalize()
+        .map_err(|_| anyhow!("File does not exist: {}", path))?;
+    if !file_path.is_file() {
+        return Err(anyhow!("Not a file: {}", file_path.display()));
+    }
+
+    let workspace_root = get_workspace_root_for_path(config, &file_path)?;
+    Ok((file_path, workspace_root))
+}
+
+async fn handle_delete_lines(
+    config: &Config,
+    json_output: bool,
+    path: String,
+    start: u32,
+    end: Option<u32>,
+    dry_run: bool,
+) -> Result<()> {
+    let end_line = end.unwrap_or(start);
+    let (file_path, workspace_root) = resolve_line_edit_target(config, &path)?;
+
+    let result = send_request(
+        "delete-lines",
+        json!({
+            "workspace_root": workspace_root.to_string_lossy(),
+            "path": file_path.to_string_lossy(),
+            "start_line": start,
+            "end_line": end_line,
+            "dry_run": dry_run,
+        }),
+    )
+    .await?;
+
+    let delete_result: DeleteLinesResult = serde_json::from_value(result)?;
+
+    if json_output {
+        println!("{}", serde_json::to_string_pretty(&delete_result)?);
+    } else {
+        println!("{}", format_delete_lines_result(&delete_result));
+    }
+    Ok(())
+}
+
+async fn handle_insert_at_line(
+    config: &Config,
+    json_output: bool,
+    path: String,
+    line: u32,
+    body: Option<String>,
+    file: Option<String>,
+    dry_run: bool,
+) -> Result<()> {
+    let new_text = read_text_input(body, file)?;
+
+    if new_text.trim().is_empty() {
+        return Err(anyhow!("Inserted text is empty"));
+    }
+
+    let (file_path, workspace_root) = resolve_line_edit_target(config, &path)?;
+
+    let result = send_request(
+        "insert-at-line",
+        json!({
+            "workspace_root": workspace_root.to_string_lossy(),
+            "path": file_path.to_string_lossy(),
+            "line": line,
+            "new_text": new_text,
+            "dry_run": dry_run,
+        }),
+    )
+    .await?;
+
+    let insert_result: InsertAtLineResult = serde_json::from_value(result)?;
+
+    if json_output {
+        println!("{}", serde_json::to_string_pretty(&insert_result)?);
+    } else {
+        println!("{}", format_insert_at_line_result(&insert_result));
+    }
+    Ok(())
+}
+
+async fn handle_replace_lines(
+    config: &Config,
+    json_output: bool,
+    path: String,
+    lines: std::ops::RangeInclusive<u32>,
+    body: Option<String>,
+    file: Option<String>,
+    dry_run: bool,
+) -> Result<()> {
+    let start = *lines.start();
+    let end_line = *lines.end();
+    let new_text = read_text_input(body, file)?;
+
+    if new_text.trim().is_empty() {
+        return Err(anyhow!("Replacement text is empty"));
+    }
+
+    let (file_path, workspace_root) = resolve_line_edit_target(config, &path)?;
+
+    let result = send_request(
+        "replace-lines",
+        json!({
+            "workspace_root": workspace_root.to_string_lossy(),
+            "path": file_path.to_string_lossy(),
+            "start_line": start,
+            "end_line": end_line,
+            "new_text": new_text,
+            "dry_run": dry_run,
+        }),
+    )
+    .await?;
+
+    let replace_result: ReplaceLinesResult = serde_json::from_value(result)?;
+
+    if json_output {
+        println!("{}", serde_json::to_string_pretty(&replace_result)?);
+    } else {
+        println!("{}", format_replace_lines_result(&replace_result));
     }
     Ok(())
 }

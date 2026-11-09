@@ -23,10 +23,7 @@ pub async fn handle_replace(
         .ok_or_else(|| "Language server does not provide symbol ranges".to_string())?;
 
     if start_line == 0 || end_line < start_line {
-        return Err(format!(
-            "Invalid symbol range: {}-{}",
-            start_line, end_line
-        ));
+        return Err(format!("Invalid symbol range: {}-{}", start_line, end_line));
     }
 
     if params.new_text.trim().is_empty() {
@@ -44,26 +41,29 @@ pub async fn handle_replace(
         .as_deref()
         .unwrap_or(params.path.as_str());
 
-    let check_signature =
-        params.check_signature && is_function_like(params.symbol_kind.as_deref());
+    let check_signature = params.check_signature && is_function_like(params.symbol_kind.as_deref());
     if check_signature {
         let lines: Vec<&str> = original.lines().collect();
         let style = header_style(&file_path);
 
         let start_idx = start_line as usize - 1;
         let end_idx = (end_line as usize - 1).min(lines.len().saturating_sub(1));
-        let old_header = extract_header_from_lines(lines[start_idx..=end_idx].iter().copied(), style)
-            .ok_or_else(|| {
+        let old_header =
+            extract_header_from_lines(lines[start_idx..=end_idx].iter().copied(), style)
+                .ok_or_else(|| {
+                    format!(
+                        "Could not extract signature for '{}'; use --no-check-signature \
+                 to replace anyway",
+                        symbol_label
+                    )
+                })?;
+        let new_header =
+            extract_header_from_lines(params.new_text.lines(), style).ok_or_else(|| {
                 format!(
-                    "Could not extract signature for '{}'; use --no-check-signature to replace anyway",
-                    symbol_label
+                    "Could not extract signature from replacement text; \
+                 use --no-check-signature to replace anyway"
                 )
             })?;
-        let new_header = extract_header_from_lines(params.new_text.lines(), style).ok_or_else(|| {
-            format!(
-                "Could not extract signature from replacement text; use --no-check-signature to replace anyway"
-            )
-        })?;
 
         let old_normalized = normalize_signature(&old_header);
         let new_normalized = normalize_signature(&new_header);
@@ -249,10 +249,7 @@ where
                 '}' if parens <= 0 && brackets <= 0 && braces > 0 => {
                     braces -= 1;
                 }
-                ':' if style == HeaderStyle::ColonTerminated
-                    && parens <= 0
-                    && brackets <= 0 =>
-                {
+                ':' if style == HeaderStyle::ColonTerminated && parens <= 0 && brackets <= 0 => {
                     terminator = Some(pos + 1);
                 }
                 ';' | '=' if style == HeaderStyle::BraceTerminated => {
@@ -357,10 +354,7 @@ mod tests {
 
     #[test]
     fn truncates_python_one_line_body() {
-        let lines = [
-            "def foo() -> int: return 1",
-            "def bar() -> int: return 2",
-        ];
+        let lines = ["def foo() -> int: return 1", "def bar() -> int: return 2"];
         let header =
             extract_header_from_lines(lines.iter().copied(), HeaderStyle::ColonTerminated).unwrap();
         assert_eq!(header, "def foo() -> int:");
@@ -378,10 +372,7 @@ mod tests {
         ];
         let header =
             extract_header_from_lines(lines.iter().copied(), HeaderStyle::BraceTerminated).unwrap();
-        assert_eq!(
-            header,
-            "pub fn foo<T>(value: T) -> T where T: Clone, {"
-        );
+        assert_eq!(header, "pub fn foo<T>(value: T) -> T where T: Clone, {");
     }
 
     #[test]

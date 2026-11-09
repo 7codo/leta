@@ -9,10 +9,10 @@ use leta_cache::LmdbCache;
 use leta_config::Config;
 use leta_daemon::handlers::{handle_add_workspace, handle_remove_workspace};
 use leta_daemon::handlers::{
-    handle_calls, handle_declaration, handle_files, handle_graph, handle_grep,
-    handle_implementations, handle_insert, handle_move_file, handle_references, handle_rename,
-    handle_replace, handle_resolve_symbol, handle_show, handle_subtypes, handle_supertypes,
-    HandlerContext,
+    handle_calls, handle_declaration, handle_delete_lines, handle_files, handle_graph, handle_grep,
+    handle_implementations, handle_insert, handle_insert_at_line, handle_move_file,
+    handle_references, handle_rename, handle_replace, handle_replace_lines, handle_resolve_symbol,
+    handle_show, handle_subtypes, handle_supertypes, HandlerContext,
 };
 use leta_daemon::session::Session;
 use leta_output::*;
@@ -569,6 +569,103 @@ pub async fn insert(
         .map_err(|e| anyhow!("{}", e))?;
 
     Ok(format_insert_result(&result))
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct LineEditOptions {
+    /// Compute the edit without writing it to disk.
+    pub dry_run: bool,
+}
+
+fn resolve_line_edit_path(
+    config: &Config,
+    working_dir: &Path,
+    path: &str,
+) -> Result<(PathBuf, PathBuf)> {
+    let file_path = working_dir
+        .join(path)
+        .canonicalize()
+        .map_err(|_| anyhow!("File does not exist: {}", path))?;
+    if !file_path.is_file() {
+        return Err(anyhow!("Not a file: {}", file_path.display()));
+    }
+
+    let workspace_root = get_workspace_root_for_path(config, &file_path, working_dir)?;
+    Ok((file_path, workspace_root))
+}
+
+pub async fn delete_lines(
+    working_dir: &Path,
+    path: &str,
+    start_line: u32,
+    end_line: u32,
+    options: LineEditOptions,
+) -> Result<String> {
+    let state = get_state().await?;
+    let (file_path, workspace_root) = resolve_line_edit_path(&state.config, working_dir, path)?;
+
+    let params = DeleteLinesParams {
+        workspace_root: workspace_root.to_string_lossy().to_string(),
+        path: file_path.to_string_lossy().to_string(),
+        start_line,
+        end_line,
+        dry_run: options.dry_run,
+    };
+    let result = handle_delete_lines(&state.ctx, params)
+        .await
+        .map_err(|e| anyhow!("{}", e))?;
+
+    Ok(format_delete_lines_result(&result))
+}
+
+pub async fn insert_at_line(
+    working_dir: &Path,
+    path: &str,
+    line: u32,
+    new_text: &str,
+    options: LineEditOptions,
+) -> Result<String> {
+    let state = get_state().await?;
+    let (file_path, workspace_root) = resolve_line_edit_path(&state.config, working_dir, path)?;
+
+    let params = InsertAtLineParams {
+        workspace_root: workspace_root.to_string_lossy().to_string(),
+        path: file_path.to_string_lossy().to_string(),
+        line,
+        new_text: new_text.to_string(),
+        dry_run: options.dry_run,
+    };
+    let result = handle_insert_at_line(&state.ctx, params)
+        .await
+        .map_err(|e| anyhow!("{}", e))?;
+
+    Ok(format_insert_at_line_result(&result))
+}
+
+pub async fn replace_lines(
+    working_dir: &Path,
+    path: &str,
+    start_line: u32,
+    end_line: u32,
+    new_text: &str,
+    options: LineEditOptions,
+) -> Result<String> {
+    let state = get_state().await?;
+    let (file_path, workspace_root) = resolve_line_edit_path(&state.config, working_dir, path)?;
+
+    let params = ReplaceLinesParams {
+        workspace_root: workspace_root.to_string_lossy().to_string(),
+        path: file_path.to_string_lossy().to_string(),
+        start_line,
+        end_line,
+        new_text: new_text.to_string(),
+        dry_run: options.dry_run,
+    };
+    let result = handle_replace_lines(&state.ctx, params)
+        .await
+        .map_err(|e| anyhow!("{}", e))?;
+
+    Ok(format_replace_lines_result(&result))
 }
 
 pub async fn mv(working_dir: &Path, old_path: &str, new_path: &str) -> Result<String> {

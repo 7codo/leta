@@ -640,6 +640,75 @@ pub struct InsertResult {
 }
 
 // ============================================================================
+// Line-Based Edits
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteLinesParams {
+    pub workspace_root: String,
+    pub path: String,
+    pub start_line: u32,
+    pub end_line: u32,
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteLinesResult {
+    pub deleted: bool,
+    pub path: String,
+    pub start_line: u32,
+    pub end_line: u32,
+    pub deleted_line_count: u32,
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InsertAtLineParams {
+    pub workspace_root: String,
+    pub path: String,
+    pub line: u32,
+    pub new_text: String,
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InsertAtLineResult {
+    pub inserted: bool,
+    pub path: String,
+    pub insert_line: u32,
+    pub new_line_count: u32,
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplaceLinesParams {
+    pub workspace_root: String,
+    pub path: String,
+    pub start_line: u32,
+    pub end_line: u32,
+    pub new_text: String,
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplaceLinesResult {
+    pub replaced: bool,
+    pub path: String,
+    pub start_line: u32,
+    pub end_line: u32,
+    pub new_start_line: u32,
+    pub new_end_line: u32,
+    pub new_line_count: u32,
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+// ============================================================================
 // Move File
 // ============================================================================
 

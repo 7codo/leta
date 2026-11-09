@@ -299,6 +299,70 @@ pub fn format_insert_result(result: &InsertResult) -> String {
     )
 }
 
+pub fn format_delete_lines_result(result: &DeleteLinesResult) -> String {
+    let verb = if result.dry_run {
+        "Would delete"
+    } else {
+        "Deleted"
+    };
+    let lines = if result.deleted_line_count == 1 {
+        "line"
+    } else {
+        "lines"
+    };
+    let range = if result.start_line == result.end_line {
+        format!("line {}", result.start_line)
+    } else {
+        format!("lines {}-{}", result.start_line, result.end_line)
+    };
+
+    format!(
+        "{} {} {} in {} ({})",
+        verb, result.deleted_line_count, lines, result.path, range
+    )
+}
+
+pub fn format_insert_at_line_result(result: &InsertAtLineResult) -> String {
+    let verb = if result.dry_run {
+        "Would insert"
+    } else {
+        "Inserted"
+    };
+    let lines = if result.new_line_count == 1 {
+        "line"
+    } else {
+        "lines"
+    };
+
+    format!(
+        "{} {} {} in {} (line {})",
+        verb, result.new_line_count, lines, result.path, result.insert_line
+    )
+}
+
+pub fn format_replace_lines_result(result: &ReplaceLinesResult) -> String {
+    let old_range = if result.start_line == result.end_line {
+        result.start_line.to_string()
+    } else {
+        format!("{}-{}", result.start_line, result.end_line)
+    };
+    let new_range = if result.new_start_line == result.new_end_line {
+        result.new_start_line.to_string()
+    } else {
+        format!("{}-{}", result.new_start_line, result.new_end_line)
+    };
+    let verb = if result.dry_run {
+        "Would replace"
+    } else {
+        "Replaced"
+    };
+
+    format!(
+        "{} lines in {} (lines {} -> {})",
+        verb, result.path, old_range, new_range
+    )
+}
+
 pub fn format_move_file_result(result: &MoveFileResult) -> String {
     let mut files: Vec<_> = result.files_changed.iter().collect();
     files.sort();

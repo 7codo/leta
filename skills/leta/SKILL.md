@@ -30,6 +30,9 @@ After loading this skill, **leta should be your DEFAULT tool for code exploratio
 | Trying to understand an unfamiliar codebase | `leta graph` first for architecture overview |
 | Rewriting a whole function/method with the edit tool | `leta replace <symbol>` (pipe the new definition) |
 | Adding a new function/method next to an existing one | `leta insert-after <symbol>` (pipe the new definition) |
+| Deleting a block of lines you can identify by line number | `leta delete-lines <path> <start> [end]` |
+| Inserting text at a specific line | `leta insert-at-line <path> <line>` (pipe the new text) |
+| Replacing a block of lines with new content | `leta replace-lines <path> <start> [end]` (pipe the new text) |
 
 **The Golden Rule:** If you know the symbol name, **always** use leta. Only use ripgrep when searching for things that aren't symbols (string literals, comments, config values).
 
@@ -310,6 +313,27 @@ leta insert-before parse_config --file /tmp/helper.py
 
 # Preview without writing
 leta insert-after parse_config --body 'def reload(): pass' --dry-run
+```
+
+### `leta delete-lines` / `leta insert-at-line` / `leta replace-lines` - Line Edits
+
+Edit a file by line number instead of symbol. Lines are 1-based and ranges are
+inclusive; `END` defaults to `START`. `insert-at-line` inserts before the given
+line (`line_count + 1` appends). Text is inserted verbatim, with no
+re-indentation.
+
+```bash
+# Delete lines 12 through 15
+leta delete-lines notes.txt 12 15
+
+# Insert a line before line 3
+printf 'new line\n' | leta insert-at-line notes.txt 3
+
+# Replace lines 4-6 with a single line
+leta replace-lines config.yml 4 6 --body 'key: value'
+
+# Preview without writing
+leta delete-lines notes.txt 12 --dry-run
 ```
 
 ### `leta mv` - Move File and Update Imports

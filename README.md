@@ -41,6 +41,7 @@ class UserHandler:
   - [rename](#rename)
   - [replace](#replace)
   - [insert-before / insert-after](#insert-before--insert-after)
+  - [Line-based edits](#line-based-edits)
   - [mv](#mv)
 - [Symbol formats](#symbol-formats)
 - [Daemon management](#daemon-management)
@@ -466,6 +467,27 @@ Examples:
 printf '\ndef load_all(self):\n    return dict(self._data)\n' | leta insert-after EditableStorage.save
 leta insert-before parse_config --file new_helper.py
 leta insert-after parse_config --body 'def reload(): pass' --dry-run
+```
+
+### Line-based edits
+
+Edit a file by line number when you already know the range and don't want to
+resolve a symbol. Lines are 1-based and ranges are inclusive; `END` defaults to
+`START`, and `insert-at-line` inserts before line `LINE` (`LINE = line_count + 1`
+appends). Text is inserted verbatim — no re-indentation.
+
+```bash
+leta delete-lines  <PATH> <START> [END]  [--dry-run]
+leta insert-at-line <PATH> <LINE>        [--body <TEXT> | --file <PATH>] [--dry-run]
+leta replace-lines <PATH> <START> [END]  [--body <TEXT> | --file <PATH>] [--dry-run]
+```
+
+Examples:
+
+```bash
+leta delete-lines notes.txt 12 15
+printf 'new line\n' | leta insert-at-line notes.txt 3
+leta replace-lines config.yml 4 6 --body 'key: value'
 ```
 
 ### mv

@@ -1,0 +1,103 @@
+===
+backup editable fixture (this file restores it at the end)
+===
+cp editable.py editable.py.bak
+---
+
+===
+delete range of lines
+===
+leta delete-lines editable.py 29 30
+---
+Deleted 2 lines in editable.py (lines 29-30)
+
+===
+verify symbol shifted up
+===
+leta show EditableStorage
+---
+editable.py:29-41
+
+class EditableStorage:
+    """Editable storage class for testing method replacement."""
+
+    def __init__(self) -> None:
+        self._data: dict[str, str] = {}
+
+    def save(self, key: str, value: str) -> None:
+        """Save a value."""
+        self._data[key] = value
+
+    def load(self, key: str) -> str | None:
+        """Load a value."""
+        return self._data.get(key)
+
+===
+insert content at line from stdin
+===
+printf 'class EditableCache:\n    """Cache."""\n' | leta insert-at-line editable.py 29
+---
+Inserted 2 lines in editable.py (line 29)
+
+===
+verify inserted class
+===
+leta show EditableCache
+---
+editable.py:29-30
+
+class EditableCache:
+    """Cache."""
+
+===
+replace range of lines with new content
+===
+printf 'class EditableCache:\n    """Cached values."""\n    pass\n' | leta replace-lines editable.py 29 30
+---
+Replaced lines in editable.py (lines 29-30 -> 29-31)
+
+===
+verify replaced class
+===
+leta show EditableCache
+---
+editable.py:29-31
+
+class EditableCache:
+    """Cached values."""
+    pass
+
+===
+dry run does not write
+===
+leta delete-lines editable.py 29 --dry-run
+---
+Would delete 1 line in editable.py (line 29)
+
+===
+verify dry run left file unchanged
+===
+leta show EditableCache
+---
+editable.py:29-31
+
+class EditableCache:
+    """Cached values."""
+    pass
+
+===
+restore fixture from backup
+===
+mv editable.py.bak editable.py
+---
+
+===
+verify fixture restored
+===
+leta show editable_validate_email
+---
+editable.py:26-28
+
+def editable_validate_email(email: str) -> bool:
+    """Validate an editable email address."""
+    return "@" in email

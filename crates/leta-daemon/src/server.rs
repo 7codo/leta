@@ -13,11 +13,12 @@ use tokio::sync::{broadcast, mpsc};
 use tracing::{error, info};
 
 use crate::handlers::{
-    handle_add_workspace, handle_calls, handle_declaration, handle_describe_session, handle_files,
-    handle_files_streaming, handle_graph, handle_grep, handle_grep_streaming,
-    handle_implementations, handle_insert, handle_move_file, handle_references,
-    handle_remove_workspace, handle_rename, handle_replace, handle_resolve_symbol,
-    handle_restart_workspace, handle_show, handle_subtypes, handle_supertypes, HandlerContext,
+    handle_add_workspace, handle_calls, handle_declaration, handle_delete_lines,
+    handle_describe_session, handle_files, handle_files_streaming, handle_graph, handle_grep,
+    handle_grep_streaming, handle_implementations, handle_insert, handle_insert_at_line,
+    handle_move_file, handle_references, handle_remove_workspace, handle_rename, handle_replace,
+    handle_replace_lines, handle_resolve_symbol, handle_restart_workspace, handle_show,
+    handle_subtypes, handle_supertypes, HandlerContext,
 };
 use crate::profiling::CollectingReporter;
 use crate::session::Session;
@@ -310,6 +311,9 @@ impl DaemonServer {
             "rename" => handle!(RenameParams, handle_rename),
             "replace" => handle!(ReplaceParams, handle_replace),
             "insert" => handle!(InsertParams, handle_insert),
+            "delete-lines" => handle!(DeleteLinesParams, handle_delete_lines),
+            "insert-at-line" => handle!(InsertAtLineParams, handle_insert_at_line),
+            "replace-lines" => handle!(ReplaceLinesParams, handle_replace_lines),
             "move-file" => handle!(MoveFileParams, handle_move_file),
             "files" => handle!(FilesParams, handle_files),
             "resolve-symbol" => handle!(ResolveSymbolParams, handle_resolve_symbol),

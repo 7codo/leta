@@ -26,6 +26,10 @@ read from stdin or a file.
 Use `leta insert-before SYMBOL` or `leta insert-after SYMBOL` to add new
 definitions next to an existing symbol.
 
+Use `leta delete-lines PATH START [END]`, `leta insert-at-line PATH LINE`, and
+`leta replace-lines PATH START [END]` for edits by line number instead of
+symbol name.
+
 See `leta COMMAND --help` for more documentation and command-specific options.
 
 Usage: leta [OPTIONS] <COMMAND>
@@ -45,6 +49,9 @@ Commands:
   replace          Replace a symbol definition with new contents from stdin or a file.
   insert-before    Insert new source immediately before a symbol.
   insert-after     Insert new source immediately after a symbol.
+  delete-lines     Delete a range of lines within a file.
+  insert-at-line   Insert content at a given line in a file.
+  replace-lines    Replace a range of lines within a file with new content.
   mv               Move/rename a file and update all imports.
   workspace        Manage workspaces.
   daemon           Manage the leta daemon.
