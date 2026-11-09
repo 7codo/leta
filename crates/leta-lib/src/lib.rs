@@ -10,7 +10,7 @@ use leta_config::Config;
 use leta_daemon::handlers::{handle_add_workspace, handle_remove_workspace};
 use leta_daemon::handlers::{
     handle_calls, handle_declaration, handle_files, handle_graph, handle_grep,
-    handle_implementations, handle_move_file, handle_references, handle_rename,
+    handle_implementations, handle_move_file, handle_references, handle_rename, handle_replace,
     handle_resolve_symbol, handle_show, handle_subtypes, handle_supertypes, HandlerContext,
 };
 use leta_daemon::session::Session;
@@ -484,6 +484,53 @@ pub async fn rename(working_dir: &Path, symbol: &str, new_name: &str) -> Result<
         .map_err(|e| anyhow!("{}", e))?;
 
     Ok(format_rename_result(&result))
+}
+
+pub struct ReplaceOptions {
+    /// Validate that the replacement function/method signature matches the
+    /// original. Ignored for non-function symbols.
+    pub check_signature: bool,
+    /// Compute the replacement without writing it to disk.
+    pub dry_run: bool,
+}
+
+impl Default for ReplaceOptions {
+    fn default() -> Self {
+        Self {
+            check_signature: true,
+            dry_run: false,
+        }
+    }
+}
+
+pub async fn replace(
+    working_dir: &Path,
+    symbol: &str,
+    new_text: &str,
+    options: ReplaceOptions,
+) -> Result<String> {
+    let state = get_state().await?;
+    let workspace_root = get_workspace_root(&state.config, working_dir)?;
+    let resolved = resolve(symbol, &workspace_root).await?;
+
+    let params = ReplaceParams {
+        workspace_root: workspace_root.to_string_lossy().to_string(),
+        path: resolved.path.unwrap_or_default(),
+        line: resolved.line.unwrap_or(0),
+        column: resolved.column.unwrap_or(0),
+        symbol_name: Some(symbol.to_string()),
+        symbol_kind: resolved.kind,
+        range_start_line: resolved.range_start_line,
+        range_end_line: resolved.range_end_line,
+        new_text: new_text.to_string(),
+        check_signature: options.check_signature,
+        dry_run: options.dry_run,
+    };
+    let result = handle_replace(&state.ctx, params)
+        .await
+        .map_err(|e| anyhow!("{}", e))?;
+
+    Ok(format_replace_result(&result))
 }
 
 pub async fn mv(working_dir: &Path, old_path: &str, new_path: &str) -> Result<String> {

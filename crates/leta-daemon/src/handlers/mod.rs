@@ -5,6 +5,7 @@ mod grep;
 mod index;
 mod refs;
 mod rename;
+mod replace;
 mod resolve;
 mod session;
 mod show;
@@ -29,6 +30,7 @@ pub use refs::{
     handle_supertypes,
 };
 pub use rename::{handle_move_file, handle_rename};
+pub use replace::handle_replace;
 pub use resolve::handle_resolve_symbol;
 pub use session::{handle_describe_session, handle_remove_workspace, handle_restart_workspace};
 pub use show::handle_show;

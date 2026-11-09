@@ -16,8 +16,8 @@ use crate::handlers::{
     handle_add_workspace, handle_calls, handle_declaration, handle_describe_session, handle_files,
     handle_files_streaming, handle_graph, handle_grep, handle_grep_streaming,
     handle_implementations, handle_move_file, handle_references, handle_remove_workspace,
-    handle_rename, handle_resolve_symbol, handle_restart_workspace, handle_show, handle_subtypes,
-    handle_supertypes, HandlerContext,
+    handle_rename, handle_replace, handle_resolve_symbol, handle_restart_workspace, handle_show,
+    handle_subtypes, handle_supertypes, HandlerContext,
 };
 use crate::profiling::CollectingReporter;
 use crate::session::Session;
@@ -308,6 +308,7 @@ impl DaemonServer {
             "calls" => handle!(CallsParams, handle_calls),
             "graph" => handle!(GraphParams, handle_graph),
             "rename" => handle!(RenameParams, handle_rename),
+            "replace" => handle!(ReplaceParams, handle_replace),
             "move-file" => handle!(MoveFileParams, handle_move_file),
             "files" => handle!(FilesParams, handle_files),
             "resolve-symbol" => handle!(ResolveSymbolParams, handle_resolve_symbol),

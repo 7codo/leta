@@ -20,6 +20,9 @@ Use `leta show SYMBOL` to print the full body of a symbol. Use `leta refs
 SYMBOL` to find all uses of a symbol. These two (and other) commands accept
 `--context N` for surrounding lines.
 
+Use `leta replace SYMBOL` to replace a symbol definition with new source
+read from stdin or a file.
+
 See `leta COMMAND --help` for more documentation and command-specific options.
 
 Usage: leta [OPTIONS] <COMMAND>
@@ -36,6 +39,7 @@ Commands:
   subtypes         Find direct subtypes of a type.
   declaration      Find declaration of a symbol.
   rename           Rename a symbol across the workspace.
+  replace          Replace a symbol definition with new contents from stdin or a file.
   mv               Move/rename a file and update all imports.
   workspace        Manage workspaces.
   daemon           Manage the leta daemon.

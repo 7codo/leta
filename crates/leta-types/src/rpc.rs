@@ -554,6 +554,49 @@ pub struct RenameResult {
 }
 
 // ============================================================================
+// Replace Symbol Body
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplaceParams {
+    pub workspace_root: String,
+    pub path: String,
+    pub line: u32,
+    #[serde(default)]
+    pub column: u32,
+    #[serde(skip_serializing_if = "Option::is_none", alias = "symbol")]
+    pub symbol_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", alias = "kind")]
+    pub symbol_kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub range_start_line: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub range_end_line: Option<u32>,
+    pub new_text: String,
+    #[serde(default = "default_true")]
+    pub check_signature: bool,
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplaceResult {
+    pub replaced: bool,
+    pub path: String,
+    pub old_start_line: u32,
+    pub old_end_line: u32,
+    pub new_start_line: u32,
+    pub new_end_line: u32,
+    pub new_line_count: u32,
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+// ============================================================================
 // Move File
 // ============================================================================
 

@@ -1,0 +1,118 @@
+===
+replace function body
+===
+leta replace editable_validate_email --body 'def editable_validate_email(email: str) -> bool: return "@" in email and len(email) > 3'
+---
+Replaced symbol in editable.py (lines 26-28 -> 26)
+
+===
+verify replacement
+===
+leta show editable_validate_email
+---
+editable.py:26
+
+def editable_validate_email(email: str) -> bool: return "@" in email and len(email) > 3
+
+===
+reject signature change
+===
+leta replace editable_validate_email --body 'def editable_validate_email(email: str, strict: bool) -> bool: return "@" in email'
+---
+Error: Signature mismatch for 'editable_validate_email':
+  old: def editable_validate_email(email: str) -> bool:
+  new: def editable_validate_email(email: str, strict: bool) -> bool:
+Use --no-check-signature to replace anyway
+
+===
+verify file unchanged after signature error
+===
+leta show editable_validate_email
+---
+editable.py:26
+
+def editable_validate_email(email: str) -> bool: return "@" in email and len(email) > 3
+
+===
+dry run does not write
+===
+leta replace editable_validate_email --body 'def editable_validate_email(email: str) -> bool: return email.endswith("@example.com")' --dry-run
+---
+Would replace symbol in editable.py (lines 26 -> 26)
+
+===
+verify dry run left file unchanged
+===
+leta show editable_validate_email
+---
+editable.py:26
+
+def editable_validate_email(email: str) -> bool: return "@" in email and len(email) > 3
+
+===
+replace with changed signature using --no-check-signature
+===
+leta replace editable_validate_email --body 'def editable_validate_email(email: str, strict: bool) -> bool: return "@" in email' --no-check-signature
+---
+Replaced symbol in editable.py (lines 26 -> 26)
+
+===
+verify changed signature
+===
+leta show editable_validate_email
+---
+editable.py:26
+
+def editable_validate_email(email: str, strict: bool) -> bool: return "@" in email
+
+===
+replace nested method body and reindent
+===
+leta replace EditableStorage.save --body 'def save(self, key: str, value: str) -> None: self._data[key] = value'
+---
+Replaced symbol in editable.py (lines 35-37 -> 35)
+
+===
+verify nested method reindentation
+===
+leta show EditableStorage.save
+---
+editable.py:35
+
+    def save(self, key: str, value: str) -> None: self._data[key] = value
+
+===
+restore function from stdin
+===
+printf 'def editable_validate_email(email: str) -> bool:\n    """Validate an editable email address."""\n    return "@" in email\n' | leta replace editable_validate_email --no-check-signature
+---
+Replaced symbol in editable.py (lines 26 -> 26-28)
+
+===
+verify function restored
+===
+leta show editable_validate_email
+---
+editable.py:26-28
+
+def editable_validate_email(email: str) -> bool:
+    """Validate an editable email address."""
+    return "@" in email
+
+===
+restore method from stdin
+===
+printf '    def save(self, key: str, value: str) -> None:\n        """Save a value."""\n        self._data[key] = value\n' | leta replace EditableStorage.save
+---
+Replaced symbol in editable.py (lines 37 -> 37-39)
+
+===
+verify method restored
+===
+leta show EditableStorage.save
+---
+editable.py:37-39
+
+    def save(self, key: str, value: str) -> None:
+        """Save a value."""
+        self._data[key] = value

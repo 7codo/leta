@@ -1,3 +1,4 @@
+use std::io::{IsTerminal, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -45,6 +46,9 @@ looking for specific multi-symbol strings, puncuation, or library functions.
 Use `leta show SYMBOL` to print the full body of a symbol. Use `leta refs
 SYMBOL` to find all uses of a symbol. These two (and other) commands accept
 `--context N` for surrounding lines.
+
+Use `leta replace SYMBOL` to replace a symbol definition with new source
+read from stdin or a file.
 
 See `leta COMMAND --help` for more documentation and command-specific options."#;
 
@@ -193,6 +197,24 @@ enum Commands {
         symbol: String,
         #[arg(help = "New name")]
         new_name: String,
+    },
+
+    #[command(about = "Replace a symbol definition with new contents from stdin or a file.")]
+    Replace {
+        #[arg(help = "Symbol to replace")]
+        symbol: String,
+        #[arg(long, help = "Replacement text (inline)")]
+        body: Option<String>,
+        #[arg(
+            long,
+            conflicts_with = "body",
+            help = "Read replacement from FILE ('-' reads stdin)"
+        )]
+        file: Option<String>,
+        #[arg(long, help = "Allow changing the function/method signature")]
+        no_check_signature: bool,
+        #[arg(long, help = "Show what would change without writing")]
+        dry_run: bool,
     },
 
     #[command(about = "Move/rename a file and update all imports.")]
@@ -393,6 +415,24 @@ async fn main() -> Result<()> {
                 }
                 Commands::Rename { symbol, new_name } => {
                     handle_rename(&config, cli.json, symbol, new_name).await
+                }
+                Commands::Replace {
+                    symbol,
+                    body,
+                    file,
+                    no_check_signature,
+                    dry_run,
+                } => {
+                    handle_replace(
+                        &config,
+                        cli.json,
+                        symbol,
+                        body,
+                        file,
+                        no_check_signature,
+                        dry_run,
+                    )
+                    .await
                 }
                 Commands::Mv { old_path, new_path } => {
                     handle_mv(&config, cli.json, old_path, new_path).await
@@ -1535,6 +1575,73 @@ async fn handle_rename(
         println!("{}", format_rename_result(&rename_result));
     }
     Ok(())
+}
+
+async fn handle_replace(
+    config: &Config,
+    json_output: bool,
+    symbol: String,
+    body: Option<String>,
+    file: Option<String>,
+    no_check_signature: bool,
+    dry_run: bool,
+) -> Result<()> {
+    let new_text = match (body, file) {
+        (Some(text), _) => text,
+        (None, Some(path)) if path == "-" => read_replacement_from_stdin()?,
+        (None, Some(path)) => std::fs::read_to_string(&path)
+            .map_err(|e| anyhow!("Failed to read {}: {}", path, e))?,
+        (None, None) => read_replacement_from_stdin()?,
+    };
+
+    if new_text.trim().is_empty() {
+        return Err(anyhow!("Replacement text is empty"));
+    }
+
+    let workspace_root = get_workspace_root(config)?;
+    let resolved = resolve_symbol(&symbol, &workspace_root, false)
+        .await
+        .map_err(|e| e.into_anyhow())?;
+    let resolved = resolved.resolved;
+
+    let result = send_request(
+        "replace",
+        json!({
+            "workspace_root": workspace_root.to_string_lossy(),
+            "path": resolved.path,
+            "line": resolved.line,
+            "column": resolved.column.unwrap_or(0),
+            "symbol_name": symbol,
+            "symbol_kind": resolved.kind,
+            "range_start_line": resolved.range_start_line,
+            "range_end_line": resolved.range_end_line,
+            "new_text": new_text,
+            "check_signature": !no_check_signature,
+            "dry_run": dry_run,
+        }),
+    )
+    .await?;
+
+    let replace_result: ReplaceResult = serde_json::from_value(result)?;
+
+    if json_output {
+        println!("{}", serde_json::to_string_pretty(&replace_result)?);
+    } else {
+        println!("{}", format_replace_result(&replace_result));
+    }
+    Ok(())
+}
+
+fn read_replacement_from_stdin() -> Result<String> {
+    if std::io::stdin().is_terminal() {
+        return Err(anyhow!(
+            "No replacement content provided. Use --body, --file, or pipe to stdin."
+        ));
+    }
+
+    let mut text = String::new();
+    std::io::stdin().read_to_string(&mut text)?;
+    Ok(text)
 }
 
 async fn handle_mv(

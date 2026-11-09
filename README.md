@@ -39,6 +39,7 @@ class UserHandler:
   - [supertypes / subtypes](#supertypes--subtypes)
   - [declaration](#declaration)
   - [rename](#rename)
+  - [replace](#replace)
   - [mv](#mv)
 - [Symbol formats](#symbol-formats)
 - [Daemon management](#daemon-management)
@@ -413,6 +414,33 @@ Examples:
 leta rename old_function new_function
 leta rename UserRepository.add_user insert_user
 leta rename "user.py:User" Person
+```
+
+### replace
+
+Replace a symbol definition (function, method, class, ...) with new contents.
+By default the new contents are read from stdin.
+
+```bash
+leta replace <SYMBOL> [OPTIONS]
+
+Options:
+  --body <TEXT>            Replacement text (inline)
+  --file <PATH>            Read replacement from FILE ('-' reads stdin)
+  --no-check-signature     Allow changing the function/method signature
+  --dry-run                Show what would change without writing
+```
+
+The replacement is re-indented to match the original symbol indentation. For
+functions and methods, leta validates that the signature is unchanged unless
+`--no-check-signature` is passed.
+
+Examples:
+
+```bash
+printf 'def greet():\n    return "hi"\n' | leta replace greet
+leta replace UserRepository.add_user --file new_add_user.py
+leta replace parse_config --body 'def parse_config(path): return {}' --no-check-signature
 ```
 
 ### mv

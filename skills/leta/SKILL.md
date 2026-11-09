@@ -28,6 +28,7 @@ After loading this skill, **leta should be your DEFAULT tool for code exploratio
 | Read a function's implementation to understand what it depends on | `leta calls --from <function>` first for overview |
 | Read multiple files to understand how functions connect | `leta graph` for the full picture, or `leta calls --from <function>` for a specific function |
 | Trying to understand an unfamiliar codebase | `leta graph` first for architecture overview |
+| Rewriting a whole function/method with the edit tool | `leta replace <symbol>` (pipe the new definition) |
 
 **The Golden Rule:** If you know the symbol name, **always** use leta. Only use ripgrep when searching for things that aren't symbols (string literals, comments, config values).
 
@@ -274,6 +275,23 @@ leta rename old_function_name new_function_name
 
 # Rename a method
 leta rename UserRepository.add_user create_user
+```
+
+### `leta replace` - Replace Symbol Body
+
+Replace an entire function, method, or class definition. The replacement is
+re-indented to match the original symbol. For functions and methods, the
+signature is validated by default.
+
+```bash
+# Pipe the new definition from stdin
+printf 'def greet():\n    return "hi"\n' | leta replace greet
+
+# Or read it from a file
+leta replace UserRepository.add_user --file /tmp/new_add_user.py
+
+# Allow changing the signature
+leta replace parse_config --body 'def parse_config(path): return {}' --no-check-signature
 ```
 
 ### `leta mv` - Move File and Update Imports

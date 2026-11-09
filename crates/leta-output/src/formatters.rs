@@ -252,6 +252,31 @@ pub fn format_rename_result(result: &RenameResult) -> String {
     )
 }
 
+pub fn format_replace_result(result: &ReplaceResult) -> String {
+    let range = if result.old_start_line == result.old_end_line {
+        result.old_start_line.to_string()
+    } else {
+        format!("{}-{}", result.old_start_line, result.old_end_line)
+    };
+    let new_range = if result.new_start_line == result.new_end_line {
+        result.new_start_line.to_string()
+    } else {
+        format!("{}-{}", result.new_start_line, result.new_end_line)
+    };
+
+    if result.dry_run {
+        format!(
+            "Would replace symbol in {} (lines {} -> {})",
+            result.path, range, new_range
+        )
+    } else {
+        format!(
+            "Replaced symbol in {} (lines {} -> {})",
+            result.path, range, new_range
+        )
+    }
+}
+
 pub fn format_move_file_result(result: &MoveFileResult) -> String {
     let mut files: Vec<_> = result.files_changed.iter().collect();
     files.sort();
