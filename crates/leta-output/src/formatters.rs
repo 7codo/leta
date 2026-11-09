@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 
 use leta_types::*;
@@ -1125,7 +1125,7 @@ fn format_call_path(path: &[CallNode]) -> String {
     lines.join("\n")
 }
 
-pub fn format_graph_result(result: &GraphResult, include_orphans: bool) -> String {
+pub fn format_graph_result(result: &GraphResult, include_orphans: bool, max_depth: u32) -> String {
     use leta_types::{CallGraphEdge, CallGraphSymbol};
 
     let node_key = |s: &CallGraphSymbol| format!("{}:{}:{}", s.path, s.line, s.name);
@@ -1256,18 +1256,26 @@ pub fn format_graph_result(result: &GraphResult, include_orphans: bool) -> Strin
                 root_line.push_str(" ↻");
             }
 
+            if max_depth == 0 && has_children {
+                root_line.push_str(" …");
+            }
+
             lines.push(root_line);
             visited.insert(root_key.clone());
 
-            if let Some(children) = outgoing.get(root_key.as_str()) {
-                render_graph_tree(
-                    children,
-                    &outgoing,
-                    &self_recursive,
-                    &mut visited,
-                    &mut lines,
-                    "",
-                );
+            if max_depth > 0 {
+                if let Some(children) = outgoing.get(root_key.as_str()) {
+                    render_graph_tree(
+                        children,
+                        &outgoing,
+                        &self_recursive,
+                        &mut visited,
+                        &mut lines,
+                        "",
+                        1,
+                        max_depth,
+                    );
+                }
             }
 
             lines.push(String::new());
@@ -1291,6 +1299,141 @@ pub fn format_graph_result(result: &GraphResult, include_orphans: bool) -> Strin
     }
 
     lines.join("\n")
+}
+
+/// Trim a graph result to the given tree depth from its roots.
+///
+/// Roots are nodes with outgoing calls but no incoming calls (plus
+/// self-recursive nodes with no other edges). An edge is kept when its callee
+/// is at most `max_depth` levels below a root. `u32::MAX` returns the graph
+/// unchanged.
+pub fn limit_graph_depth(result: &GraphResult, max_depth: u32) -> GraphResult {
+    if max_depth == u32::MAX {
+        return result.clone();
+    }
+
+    let node_key = |s: &CallGraphSymbol| format!("{}:{}:{}", s.path, s.line, s.name);
+
+    let mut outgoing: HashMap<String, Vec<&CallGraphEdge>> = HashMap::new();
+    let mut has_incoming: HashSet<String> = HashSet::new();
+    let mut has_outgoing: HashSet<String> = HashSet::new();
+    let mut self_recursive: HashSet<String> = HashSet::new();
+    let mut has_any_edge: HashSet<String> = HashSet::new();
+
+    for edge in &result.edges {
+        let caller_key = node_key(&edge.caller);
+        let callee_key = node_key(&edge.callee);
+        has_any_edge.insert(caller_key.clone());
+        has_any_edge.insert(callee_key.clone());
+
+        if caller_key == callee_key {
+            self_recursive.insert(caller_key);
+            continue;
+        }
+
+        outgoing.entry(caller_key.clone()).or_default().push(edge);
+        has_incoming.insert(callee_key);
+        has_outgoing.insert(caller_key);
+    }
+
+    let mut roots: Vec<String> = has_outgoing
+        .iter()
+        .filter(|key| !has_incoming.contains(*key))
+        .cloned()
+        .collect();
+    for key in &self_recursive {
+        if !has_incoming.contains(key) && !has_outgoing.contains(key) {
+            roots.push(key.clone());
+        }
+    }
+    roots.sort();
+
+    let mut node_by_key: HashMap<String, CallGraphSymbol> = HashMap::new();
+    for node in &result.nodes {
+        node_by_key.insert(node_key(node), node.clone());
+    }
+    for edge in &result.edges {
+        node_by_key
+            .entry(node_key(&edge.caller))
+            .or_insert_with(|| edge.caller.clone());
+        node_by_key
+            .entry(node_key(&edge.callee))
+            .or_insert_with(|| edge.callee.clone());
+    }
+
+    let mut best_depth: HashMap<String, u32> = HashMap::new();
+    let mut kept_nodes: HashSet<String> = HashSet::new();
+    let mut kept_edges: Vec<CallGraphEdge> = Vec::new();
+    let mut queue: VecDeque<(String, u32)> = VecDeque::new();
+
+    for root in &roots {
+        best_depth.insert(root.clone(), 0);
+        kept_nodes.insert(root.clone());
+        queue.push_back((root.clone(), 0));
+    }
+
+    while let Some((key, level)) = queue.pop_front() {
+        if level >= max_depth {
+            continue;
+        }
+        if let Some(children) = outgoing.get(&key) {
+            for edge in children {
+                let callee_key = node_key(&edge.callee);
+                let child_level = level + 1;
+                kept_edges.push((*edge).clone());
+                kept_nodes.insert(callee_key.clone());
+
+                let is_new = best_depth
+                    .get(&callee_key)
+                    .map_or(true, |&depth| child_level < depth);
+                if is_new {
+                    best_depth.insert(callee_key.clone(), child_level);
+                    queue.push_back((callee_key, child_level));
+                }
+            }
+        }
+    }
+
+    // Keep self-recursive edges for nodes that survived the depth limit.
+    for edge in &result.edges {
+        let caller_key = node_key(&edge.caller);
+        if caller_key == node_key(&edge.callee) && kept_nodes.contains(&caller_key) {
+            kept_edges.push(edge.clone());
+        }
+    }
+
+    let mut nodes: Vec<CallGraphSymbol> = kept_nodes
+        .iter()
+        .filter_map(|key| node_by_key.get(key).cloned())
+        .collect();
+    // Preserve isolated symbols (no edges at all), matching the full result.
+    for node in &result.nodes {
+        let key = node_key(node);
+        if !has_any_edge.contains(&key) && !kept_nodes.contains(&key) {
+            nodes.push(node.clone());
+        }
+    }
+    nodes.sort_by(|a, b| (&a.path, a.line).cmp(&(&b.path, b.line)));
+
+    kept_edges.sort_by(|a, b| {
+        (&a.caller.path, a.caller.line, &a.callee.name).cmp(&(
+            &b.caller.path,
+            b.caller.line,
+            &b.callee.name,
+        ))
+    });
+    kept_edges.dedup_by(|a, b| {
+        node_key(&a.caller) == node_key(&b.caller)
+            && node_key(&a.callee) == node_key(&b.callee)
+            && a.call_site_line == b.call_site_line
+    });
+
+    GraphResult {
+        nodes,
+        edges: kept_edges,
+        indexing_time_ms: result.indexing_time_ms,
+        error: result.error.clone(),
+    }
 }
 
 fn format_graph_node_label(node: &leta_types::CallGraphSymbol, show_path: bool) -> String {
@@ -1321,6 +1464,8 @@ fn render_graph_tree(
     visited: &mut HashSet<String>,
     lines: &mut Vec<String>,
     prefix: &str,
+    level: u32,
+    max_depth: u32,
 ) {
     let node_key = |s: &leta_types::CallGraphSymbol| format!("{}:{}:{}", s.path, s.line, s.name);
 
@@ -1348,21 +1493,29 @@ fn render_graph_tree(
         }
 
         let grandchildren = outgoing.get(key.as_str());
+        let at_cutoff = level >= max_depth;
         let mut line = format!("{}{}{}", prefix, connector, label);
         if is_self_recursive {
             line.push_str(" ↻");
         }
+        if at_cutoff && grandchildren.is_some() {
+            line.push_str(" …");
+        }
         lines.push(line);
 
-        if let Some(grandchildren) = grandchildren {
-            render_graph_tree(
-                grandchildren,
-                outgoing,
-                self_recursive,
-                visited,
-                lines,
-                &child_prefix,
-            );
+        if !at_cutoff {
+            if let Some(grandchildren) = grandchildren {
+                render_graph_tree(
+                    grandchildren,
+                    outgoing,
+                    self_recursive,
+                    visited,
+                    lines,
+                    &child_prefix,
+                    level + 1,
+                    max_depth,
+                );
+            }
         }
     }
 }

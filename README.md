@@ -308,14 +308,17 @@ leta calls --from main --to save --max-depth 5
 
 ### graph
 
-Show the full workspace call graph as trees rooted at entry points. This is
+Show the workspace call graph as trees rooted at entry points. This is
 the most token-efficient way to understand the architecture of a codebase.
-Test files are excluded by default.
+Test files are excluded by default. Depth is limited by default: each tree
+shows its root plus direct callees (one level).
 
 ```bash
 leta graph [OPTIONS]
 
 Options:
+  --depth <N>              Call tree depth from roots (0 = roots only) [default: 1]
+  --all-depths             Show all depths (ignore --depth)
   --include-non-workspace  Include stdlib/dependency calls
   --include-tests          Include test files (excluded by default)
   -x, --exclude-path       Exclude paths matching regex (repeatable)
@@ -325,13 +328,21 @@ Options:
 
 The output shows trees from entry points (functions nothing else calls),
 largest subgraph first. Nodes already shown get a `↑` marker; recursive
-calls get `↻`. Multi-language workspaces are grouped by language.
+calls get `↻`; a `…` marker means deeper calls were cut off by `--depth`.
+Multi-language workspaces are grouped by language. Depth applies to both
+text and `--json` output; use `--all-depths` for the complete graph.
 
 Examples:
 
 ```bash
-# Full call graph
+# Default: entry points and their direct callees
 leta graph
+
+# Three levels deep
+leta graph --depth 3
+
+# Full call graph
+leta graph --all-depths
 
 # Only Go files
 leta graph -i '\.go$'

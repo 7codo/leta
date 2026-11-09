@@ -333,11 +333,21 @@ pub struct GraphOptions {
     pub include_tests: bool,
     pub exclude_patterns: Vec<String>,
     pub include_patterns: Vec<String>,
+    /// Call tree depth from roots (0 = roots only, 1 = roots + direct callees).
+    pub depth: u32,
+    /// Ignore `depth` and render the full graph.
+    pub all_depths: bool,
 }
 
 pub async fn graph(working_dir: &Path, options: GraphOptions) -> Result<String> {
     let state = get_state().await?;
     let workspace_root = get_workspace_root(&state.config, working_dir)?;
+
+    let max_depth = if options.all_depths {
+        u32::MAX
+    } else {
+        options.depth
+    };
 
     let params = GraphParams {
         workspace_root: workspace_root.to_string_lossy().to_string(),
@@ -355,7 +365,7 @@ pub async fn graph(working_dir: &Path, options: GraphOptions) -> Result<String> 
         return Err(anyhow!("{}", error));
     }
 
-    Ok(format_graph_result(&result, false))
+    Ok(format_graph_result(&result, false, max_depth))
 }
 
 pub async fn declaration(
