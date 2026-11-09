@@ -40,6 +40,7 @@ class UserHandler:
   - [declaration](#declaration)
   - [rename](#rename)
   - [replace](#replace)
+  - [insert-before / insert-after](#insert-before--insert-after)
   - [mv](#mv)
 - [Symbol formats](#symbol-formats)
 - [Daemon management](#daemon-management)
@@ -441,6 +442,30 @@ Examples:
 printf 'def greet():\n    return "hi"\n' | leta replace greet
 leta replace UserRepository.add_user --file new_add_user.py
 leta replace parse_config --body 'def parse_config(path): return {}' --no-check-signature
+```
+
+### insert-before / insert-after
+
+Insert new source immediately before or after a symbol definition. The text is
+read from stdin by default, re-indented to match the target symbol, and inserted
+verbatim (include blank lines yourself if you want separation).
+
+```bash
+leta insert-before <SYMBOL> [OPTIONS]
+leta insert-after <SYMBOL> [OPTIONS]
+
+Options:
+  --body <TEXT>   Text to insert (inline)
+  --file <PATH>   Read text from FILE ('-' reads stdin)
+  --dry-run       Show what would change without writing
+```
+
+Examples:
+
+```bash
+printf '\ndef load_all(self):\n    return dict(self._data)\n' | leta insert-after EditableStorage.save
+leta insert-before parse_config --file new_helper.py
+leta insert-after parse_config --body 'def reload(): pass' --dry-run
 ```
 
 ### mv

@@ -29,6 +29,7 @@ After loading this skill, **leta should be your DEFAULT tool for code exploratio
 | Read multiple files to understand how functions connect | `leta graph` for the full picture, or `leta calls --from <function>` for a specific function |
 | Trying to understand an unfamiliar codebase | `leta graph` first for architecture overview |
 | Rewriting a whole function/method with the edit tool | `leta replace <symbol>` (pipe the new definition) |
+| Adding a new function/method next to an existing one | `leta insert-after <symbol>` (pipe the new definition) |
 
 **The Golden Rule:** If you know the symbol name, **always** use leta. Only use ripgrep when searching for things that aren't symbols (string literals, comments, config values).
 
@@ -292,6 +293,23 @@ leta replace UserRepository.add_user --file /tmp/new_add_user.py
 
 # Allow changing the signature
 leta replace parse_config --body 'def parse_config(path): return {}' --no-check-signature
+```
+
+### `leta insert-before` / `leta insert-after` - Insert Symbol
+
+Insert new source immediately before or after an existing symbol. The text is
+re-indented to match the target symbol and inserted verbatim (include blank
+lines in the input if you want separation).
+
+```bash
+# Add a method after an existing one
+printf '\ndef load_all(self):\n    return dict(self._data)\n' | leta insert-after EditableStorage.save
+
+# Add a top-level function before an existing one
+leta insert-before parse_config --file /tmp/helper.py
+
+# Preview without writing
+leta insert-after parse_config --body 'def reload(): pass' --dry-run
 ```
 
 ### `leta mv` - Move File and Update Imports

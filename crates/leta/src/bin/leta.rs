@@ -50,6 +50,9 @@ SYMBOL` to find all uses of a symbol. These two (and other) commands accept
 Use `leta replace SYMBOL` to replace a symbol definition with new source
 read from stdin or a file.
 
+Use `leta insert-before SYMBOL` or `leta insert-after SYMBOL` to add new
+definitions next to an existing symbol.
+
 See `leta COMMAND --help` for more documentation and command-specific options."#;
 
 #[derive(Parser)]
@@ -213,6 +216,38 @@ enum Commands {
         file: Option<String>,
         #[arg(long, help = "Allow changing the function/method signature")]
         no_check_signature: bool,
+        #[arg(long, help = "Show what would change without writing")]
+        dry_run: bool,
+    },
+
+    #[command(about = "Insert new source immediately before a symbol.")]
+    InsertBefore {
+        #[arg(help = "Symbol to insert before")]
+        symbol: String,
+        #[arg(long, help = "Text to insert (inline)")]
+        body: Option<String>,
+        #[arg(
+            long,
+            conflicts_with = "body",
+            help = "Read text from FILE ('-' reads stdin)"
+        )]
+        file: Option<String>,
+        #[arg(long, help = "Show what would change without writing")]
+        dry_run: bool,
+    },
+
+    #[command(about = "Insert new source immediately after a symbol.")]
+    InsertAfter {
+        #[arg(help = "Symbol to insert after")]
+        symbol: String,
+        #[arg(long, help = "Text to insert (inline)")]
+        body: Option<String>,
+        #[arg(
+            long,
+            conflicts_with = "body",
+            help = "Read text from FILE ('-' reads stdin)"
+        )]
+        file: Option<String>,
         #[arg(long, help = "Show what would change without writing")]
         dry_run: bool,
     },
@@ -430,6 +465,40 @@ async fn main() -> Result<()> {
                         body,
                         file,
                         no_check_signature,
+                        dry_run,
+                    )
+                    .await
+                }
+                Commands::InsertBefore {
+                    symbol,
+                    body,
+                    file,
+                    dry_run,
+                } => {
+                    handle_insert(
+                        &config,
+                        cli.json,
+                        symbol,
+                        body,
+                        file,
+                        InsertPosition::Before,
+                        dry_run,
+                    )
+                    .await
+                }
+                Commands::InsertAfter {
+                    symbol,
+                    body,
+                    file,
+                    dry_run,
+                } => {
+                    handle_insert(
+                        &config,
+                        cli.json,
+                        symbol,
+                        body,
+                        file,
+                        InsertPosition::After,
                         dry_run,
                     )
                     .await
@@ -1586,13 +1655,7 @@ async fn handle_replace(
     no_check_signature: bool,
     dry_run: bool,
 ) -> Result<()> {
-    let new_text = match (body, file) {
-        (Some(text), _) => text,
-        (None, Some(path)) if path == "-" => read_replacement_from_stdin()?,
-        (None, Some(path)) => std::fs::read_to_string(&path)
-            .map_err(|e| anyhow!("Failed to read {}: {}", path, e))?,
-        (None, None) => read_replacement_from_stdin()?,
-    };
+    let new_text = read_text_input(body, file)?;
 
     if new_text.trim().is_empty() {
         return Err(anyhow!("Replacement text is empty"));
@@ -1632,16 +1695,75 @@ async fn handle_replace(
     Ok(())
 }
 
-fn read_replacement_from_stdin() -> Result<String> {
+fn read_text_input(body: Option<String>, file: Option<String>) -> Result<String> {
+    match (body, file) {
+        (Some(text), _) => Ok(text),
+        (None, Some(path)) if path == "-" => read_text_from_stdin(),
+        (None, Some(path)) => std::fs::read_to_string(&path)
+            .map_err(|e| anyhow!("Failed to read {}: {}", path, e)),
+        (None, None) => read_text_from_stdin(),
+    }
+}
+
+fn read_text_from_stdin() -> Result<String> {
     if std::io::stdin().is_terminal() {
         return Err(anyhow!(
-            "No replacement content provided. Use --body, --file, or pipe to stdin."
+            "No input provided. Use --body, --file, or pipe to stdin."
         ));
     }
 
     let mut text = String::new();
     std::io::stdin().read_to_string(&mut text)?;
     Ok(text)
+}
+
+async fn handle_insert(
+    config: &Config,
+    json_output: bool,
+    symbol: String,
+    body: Option<String>,
+    file: Option<String>,
+    position: InsertPosition,
+    dry_run: bool,
+) -> Result<()> {
+    let new_text = read_text_input(body, file)?;
+
+    if new_text.trim().is_empty() {
+        return Err(anyhow!("Inserted text is empty"));
+    }
+
+    let workspace_root = get_workspace_root(config)?;
+    let resolved = resolve_symbol(&symbol, &workspace_root, false)
+        .await
+        .map_err(|e| e.into_anyhow())?;
+    let resolved = resolved.resolved;
+
+    let result = send_request(
+        "insert",
+        json!({
+            "workspace_root": workspace_root.to_string_lossy(),
+            "path": resolved.path,
+            "line": resolved.line,
+            "column": resolved.column.unwrap_or(0),
+            "symbol_name": symbol,
+            "symbol_kind": resolved.kind,
+            "range_start_line": resolved.range_start_line,
+            "range_end_line": resolved.range_end_line,
+            "new_text": new_text,
+            "position": position,
+            "dry_run": dry_run,
+        }),
+    )
+    .await?;
+
+    let insert_result: InsertResult = serde_json::from_value(result)?;
+
+    if json_output {
+        println!("{}", serde_json::to_string_pretty(&insert_result)?);
+    } else {
+        println!("{}", format_insert_result(&insert_result));
+    }
+    Ok(())
 }
 
 async fn handle_mv(

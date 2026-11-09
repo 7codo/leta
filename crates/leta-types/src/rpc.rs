@@ -597,6 +597,49 @@ pub struct ReplaceResult {
 }
 
 // ============================================================================
+// Insert Before/After Symbol
+// ============================================================================
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InsertPosition {
+    Before,
+    After,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InsertParams {
+    pub workspace_root: String,
+    pub path: String,
+    pub line: u32,
+    #[serde(default)]
+    pub column: u32,
+    #[serde(skip_serializing_if = "Option::is_none", alias = "symbol")]
+    pub symbol_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", alias = "kind")]
+    pub symbol_kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub range_start_line: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub range_end_line: Option<u32>,
+    pub new_text: String,
+    pub position: InsertPosition,
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InsertResult {
+    pub inserted: bool,
+    pub path: String,
+    pub position: InsertPosition,
+    pub insert_line: u32,
+    pub new_line_count: u32,
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+// ============================================================================
 // Move File
 // ============================================================================
 

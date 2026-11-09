@@ -3,12 +3,14 @@ mod files;
 mod graph;
 mod grep;
 mod index;
+mod insert;
 mod refs;
 mod rename;
 mod replace;
 mod resolve;
 mod session;
 mod show;
+mod text_edit;
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -25,6 +27,7 @@ pub use files::{handle_files, handle_files_streaming};
 pub use graph::handle_graph;
 pub use grep::{get_file_symbols, handle_grep, handle_grep_streaming};
 pub use index::handle_add_workspace;
+pub use insert::handle_insert;
 pub use refs::{
     handle_declaration, handle_implementations, handle_references, handle_subtypes,
     handle_supertypes,

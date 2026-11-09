@@ -277,6 +277,28 @@ pub fn format_replace_result(result: &ReplaceResult) -> String {
     }
 }
 
+pub fn format_insert_result(result: &InsertResult) -> String {
+    let position = match result.position {
+        InsertPosition::Before => "before",
+        InsertPosition::After => "after",
+    };
+    let verb = if result.dry_run {
+        "Would insert"
+    } else {
+        "Inserted"
+    };
+    let lines = if result.new_line_count == 1 {
+        "line"
+    } else {
+        "lines"
+    };
+
+    format!(
+        "{} {} symbol in {} (line {}, {} {})",
+        verb, position, result.path, result.insert_line, result.new_line_count, lines
+    )
+}
+
 pub fn format_move_file_result(result: &MoveFileResult) -> String {
     let mut files: Vec<_> = result.files_changed.iter().collect();
     files.sort();

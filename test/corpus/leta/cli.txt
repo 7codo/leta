@@ -23,6 +23,9 @@ SYMBOL` to find all uses of a symbol. These two (and other) commands accept
 Use `leta replace SYMBOL` to replace a symbol definition with new source
 read from stdin or a file.
 
+Use `leta insert-before SYMBOL` or `leta insert-after SYMBOL` to add new
+definitions next to an existing symbol.
+
 See `leta COMMAND --help` for more documentation and command-specific options.
 
 Usage: leta [OPTIONS] <COMMAND>
@@ -40,6 +43,8 @@ Commands:
   declaration      Find declaration of a symbol.
   rename           Rename a symbol across the workspace.
   replace          Replace a symbol definition with new contents from stdin or a file.
+  insert-before    Insert new source immediately before a symbol.
+  insert-after     Insert new source immediately after a symbol.
   mv               Move/rename a file and update all imports.
   workspace        Manage workspaces.
   daemon           Manage the leta daemon.

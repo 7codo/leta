@@ -4,6 +4,7 @@ use fastrace::trace;
 use leta_fs::read_file_content;
 use leta_types::{ReplaceParams, ReplaceResult};
 
+use super::text_edit::{leading_whitespace, reindent};
 use super::{relative_path, HandlerContext};
 
 #[trace]
@@ -165,43 +166,6 @@ fn replace_line_range(
     Ok((result, new_line_count))
 }
 
-/// Strip the replacement text's common leading indentation and re-apply the
-/// symbol's original indentation to every non-blank line.
-fn reindent(new_text: &str, base_indent: &str) -> String {
-    let lines: Vec<&str> = new_text.lines().collect();
-    let first_indent = lines
-        .iter()
-        .find(|line| !line.trim().is_empty())
-        .map(|line| leading_whitespace(line).len())
-        .unwrap_or(0);
-
-    lines
-        .iter()
-        .map(|line| {
-            if line.trim().is_empty() {
-                String::new()
-            } else {
-                let indent = leading_whitespace(line);
-                if indent.len() >= first_indent {
-                    format!("{}{}", base_indent, &line[first_indent..])
-                } else {
-                    format!("{}{}", base_indent, line.trim_start())
-                }
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-fn leading_whitespace(line: &str) -> &str {
-    let idx = line
-        .char_indices()
-        .find(|(_, c)| !c.is_whitespace())
-        .map(|(i, _)| i)
-        .unwrap_or(line.len());
-    &line[..idx]
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum HeaderStyle {
     /// Header is the first source line (Ruby, Lua, OCaml, Elixir, ...).
@@ -352,30 +316,6 @@ fn normalize_signature(header: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn reindents_top_level_text() {
-        let replacement = "def foo():\n    return 1\n";
-        assert_eq!(reindent(replacement, ""), "def foo():\n    return 1");
-    }
-
-    #[test]
-    fn reindents_nested_method() {
-        let replacement = "def save(self):\n    return 1\n";
-        assert_eq!(
-            reindent(replacement, "    "),
-            "    def save(self):\n        return 1"
-        );
-    }
-
-    #[test]
-    fn keeps_already_indented_text() {
-        let replacement = "    def save(self):\n        return 1\n";
-        assert_eq!(
-            reindent(replacement, "    "),
-            "    def save(self):\n        return 1"
-        );
-    }
 
     #[test]
     fn replaces_line_range_and_preserves_trailing_newline() {

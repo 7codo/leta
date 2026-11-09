@@ -1,0 +1,79 @@
+===
+backup editable fixture (this file sorts last and restores it at the end)
+===
+cp editable.py editable.py.bak
+---
+
+===
+insert before top-level function
+===
+leta insert-before editable_validate_email --body 'def inserted_before() -> str: return "before"'
+---
+Inserted before symbol in editable.py (line 26, 1 line)
+
+===
+verify inserted function
+===
+leta show inserted_before
+---
+editable.py:26
+
+def inserted_before() -> str: return "before"
+
+===
+verify original function shifted down
+===
+leta show editable_validate_email
+---
+editable.py:27-29
+
+def editable_validate_email(email: str) -> bool:
+    """Validate an editable email address."""
+    return "@" in email
+
+===
+insert after method with reindent
+===
+leta insert-after EditableStorage.save --body 'def inserted_after(self) -> str: return "after"'
+---
+Inserted after symbol in editable.py (line 41, 1 line)
+
+===
+verify inserted method is reindented
+===
+leta show inserted_after
+---
+editable.py:41
+
+    def inserted_after(self) -> str: return "after"
+
+===
+dry run does not write
+===
+leta insert-after EditableStorage.save --body 'def inserted_dry(self) -> None: pass' --dry-run
+---
+Would insert after symbol in editable.py (line 41, 1 line)
+
+===
+verify dry run left file unchanged
+===
+leta show inserted_dry
+---
+Error: Symbol 'inserted_dry' not found
+
+===
+restore fixture from backup
+===
+mv editable.py.bak editable.py
+---
+
+===
+verify fixture restored
+===
+leta show editable_validate_email
+---
+editable.py:26-28
+
+def editable_validate_email(email: str) -> bool:
+    """Validate an editable email address."""
+    return "@" in email
