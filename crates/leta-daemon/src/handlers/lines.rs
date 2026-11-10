@@ -130,7 +130,7 @@ async fn write_and_sync(
     if let Some(workspace) = ctx.session.get_workspace_for_file(file_path).await {
         let _ = workspace.ensure_document_open(file_path).await;
         workspace
-            .notify_files_changed(&[(file_path.to_path_buf(), FileChangeType::Changed)])
+            .notify_files_changed(&[(file_path.to_path_buf(), FileChangeType::CHANGED)])
             .await;
     }
 

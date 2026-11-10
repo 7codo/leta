@@ -69,7 +69,7 @@ pub async fn handle_insert(
     workspace
         .notify_files_changed(&[(
             file_path.clone(),
-            leta_lsp::lsp_types::FileChangeType::Changed,
+            leta_lsp::lsp_types::FileChangeType::CHANGED,
         )])
         .await;
 
