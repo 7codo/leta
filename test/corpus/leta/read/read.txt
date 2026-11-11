@@ -1,0 +1,104 @@
+===
+read whole file
+===
+leta read sample.txt
+---
+sample.txt:1-6
+
+1: alpha
+2: beta
+3: gamma
+4: delta
+5: epsilon
+6: zeta
+
+===
+read line range
+===
+leta read sample.txt --start-line 2 --end-line 4
+---
+sample.txt:2-4
+
+2: beta
+3: gamma
+4: delta
+
+===
+read single line
+===
+leta read sample.txt -s 3 -e 3
+---
+sample.txt:3
+
+3: gamma
+
+===
+read truncates at head
+===
+leta read sample.txt --head 2
+---
+sample.txt:1-2
+
+1: alpha
+2: beta
+
+[truncated after 2 of 6 lines, use `leta read "sample.txt" --start-line 3 --head 4` to read more, or `leta read "sample.txt" --start-line 3 -N0` to read all]
+
+===
+read raw range
+===
+leta read sample.txt --start-line 2 --end-line 3 --raw
+---
+beta
+gamma
+
+===
+read empty file
+===
+leta read empty.txt
+---
+empty.txt
+
+(empty file)
+
+===
+read missing file
+===
+leta read missing.txt
+---
+Error: File not found: missing.txt
+
+===
+read directory
+===
+leta read .
+---
+Error: Not a file: . (use `leta files .` to list directories)
+
+===
+read start past eof
+===
+leta read sample.txt --start-line 9
+---
+Error: --start-line 9 is beyond end of file (6 lines)
+
+===
+read end before start
+===
+leta read sample.txt --start-line 4 --end-line 2
+---
+Error: --end-line (2) must be >= --start-line (4)
+
+===
+read json
+===
+leta read sample.txt --start-line 2 --end-line 2 --json
+---
+{
+  "path": "sample.txt",
+  "start_line": 2,
+  "end_line": 2,
+  "total_lines": 6,
+  "content": "beta",
+  "truncated": false
+}

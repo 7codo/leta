@@ -21,6 +21,7 @@ leta-types = { workspace = true }
 leta-config = { workspace = true }
 leta-output = { workspace = true }
 leta-daemon = { workspace = true }
+leta-fs = { workspace = true }
 
 clap = { workspace = true }
 tokio = { workspace = true }

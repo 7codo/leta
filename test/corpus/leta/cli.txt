@@ -20,6 +20,10 @@ Use `leta show SYMBOL` to print the full body of a symbol. Use `leta refs
 SYMBOL` to find all uses of a symbol. These two (and other) commands accept
 `--context N` for surrounding lines.
 
+Use `leta read PATH` to print a file or line range with line numbers. It does
+not need a workspace or language server, which makes it useful for config,
+documentation, and other files without symbols.
+
 Use `leta replace SYMBOL` to replace a symbol definition with new source
 read from stdin or a file.
 
@@ -37,6 +41,7 @@ Usage: leta [OPTIONS] <COMMAND>
 Commands:
   grep             Search for symbols matching a regex pattern.
   files            Show source file tree with symbol and line counts.
+  read             Print a file or line range with line numbers.
   show             Print the definition of a symbol.
   refs             Find all references to a symbol.
   calls            Show call hierarchy for a symbol.
@@ -105,3 +110,24 @@ Options:
       --json     Output as JSON
       --profile  Print timing information for profiling
   -h, --help     Print help
+
+===
+read help
+===
+leta read --help
+---
+Print a file or line range with line numbers.
+
+Usage: leta read [OPTIONS] <PATH>
+
+Arguments:
+  <PATH>  File to read
+
+Options:
+  -s, --start-line <START_LINE>  First line to read (1-based) [default: 1]
+  -e, --end-line <END_LINE>      Last line to read (inclusive)
+  -N, --head <HEAD>              Maximum lines (0 = unlimited) [default: 2000]
+      --raw                      Print selected lines without header or line numbers
+      --json                     Output as JSON
+      --profile                  Print timing information for profiling
+  -h, --help                     Print help

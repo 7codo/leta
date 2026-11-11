@@ -31,6 +31,7 @@ class UserHandler:
 - [Commands](#commands)
   - [grep](#grep)
   - [files](#files)
+  - [read](#read)
   - [show](#show)
   - [refs](#refs)
   - [calls](#calls)
@@ -135,11 +136,19 @@ leta refs validate_email      # Find all uses of validate_email
 leta refs UserRepository -n 2 # With 2 lines of context
 ```
 
+Read a file or line range (no workspace needed):
+
+```bash
+leta read pyproject.toml
+leta read src/main.py --start-line 40 --end-line 80
+```
+
 ## AI agent skill
 
 leta includes a skill file that teaches AI coding agents (like Claude Code or
 OpenCode) how to use leta effectively. The skill instructs agents to prefer
-`leta show` over reading files, `leta refs` over grepping for usages, etc.
+`leta show` over reading files for symbols, `leta read` for non-symbol files
+and line ranges, `leta refs` over grepping for usages, etc.
 
 ### OpenCode
 
@@ -236,6 +245,33 @@ src
 └── main.py (845B, 32 lines, 2 functions)
 
 4 files, 8.0KB, 300 lines
+```
+
+### read
+
+Print a file, or a line range within a file, with line numbers. Unlike
+`leta show`, `read` does not resolve symbols and does not need a workspace or
+language server, so it works for config files, documentation, generated code,
+and other files without symbols.
+
+```bash
+leta read <PATH> [OPTIONS]
+
+Options:
+  -s, --start-line <N>  First line to read (1-based) [default: 1]
+  -e, --end-line <N>    Last line to read, inclusive [default: EOF]
+  -N, --head <N>        Maximum lines (0 = unlimited) [default: 2000]
+      --raw             Print selected lines without header or line numbers
+```
+
+Examples:
+
+```bash
+leta read src/main.py
+leta read src/main.py --start-line 40 --end-line 80
+leta read README.md --head 100
+leta read pyproject.toml --raw
+leta read src/main.py --json
 ```
 
 ### show

@@ -1,6 +1,6 @@
 ---
 name: leta
-description: "Fast semantic code navigation via LSP. Load FIRST before ANY code task - even 'simple' ones. Trigger scenarios: (1) fixing lint/type/pyright/mypy warnings or errors, (2) fixing reportAny/reportUnknownType/Any type errors, (3) adding type annotations, (4) refactoring or modifying code, (5) finding where a function/class/symbol is defined, (6) finding where a symbol is used/referenced/imported, (7) understanding what a function calls or what calls it, (8) exploring unfamiliar code or understanding architecture, (9) renaming symbols across codebase, (10) finding interface/protocol implementations, (11) ANY task where you'd use ripgrep to find code or read-file to view a function. Use `leta show SYMBOL` instead of read-file, `leta refs SYMBOL` instead of ripgrep for usages, `leta grep PATTERN` instead of ripgrep for definitions, `leta graph` for full project architecture overview, `leta files` instead of list-directory."
+description: "Fast semantic code navigation via LSP. Load FIRST before ANY code task - even 'simple' ones. Trigger scenarios: (1) fixing lint/type/pyright/mypy warnings or errors, (2) fixing reportAny/reportUnknownType/Any type errors, (3) adding type annotations, (4) refactoring or modifying code, (5) finding where a function/class/symbol is defined, (6) finding where a symbol is used/referenced/imported, (7) understanding what a function calls or what calls it, (8) exploring unfamiliar code or understanding architecture, (9) renaming symbols across codebase, (10) finding interface/protocol implementations, (11) ANY task where you'd use ripgrep to find code or read-file to view a function or file. Use `leta show SYMBOL` instead of read-file for symbols, `leta read PATH` for non-symbol files and line ranges, `leta refs SYMBOL` instead of ripgrep for usages, `leta grep PATTERN` instead of ripgrep for definitions, `leta graph` for full project architecture overview, `leta files` instead of list-directory."
 ---
 
 # Leta - LSP Enabled Tools for Agents
@@ -17,7 +17,9 @@ After loading this skill, **leta should be your DEFAULT tool for code exploratio
 |----------------------|---------------------|
 | Use `read-file` to view a function/class you know the name of | `leta show <symbol_name>` |
 | Use `read-file` with specific start and end line ranges in order to view a specific function | `leta show <symbol_name>` |
-| Use `read-file` to "browse" or "understand" a file | `leta grep ".*" "path/to/file" -k function,method` to list functions, or `leta show <symbol>` |
+| Use `read-file` for a config, doc, or generated file without symbols | `leta read <path>` |
+| Use `read-file` with a line range for a file you can't resolve by symbol | `leta read <path> --start-line N --end-line M` |
+| Use `read-file` to "browse" or "understand" a file | `leta grep ".*" "path/to/file" -k function,method` to list functions, or `leta show <symbol>`; if the file has no symbols, `leta read <path>` |
 | Use ripgrep-like tools to find where a function is defined | `leta grep "<function_name>" -k function,method` |
 | Use ripgrep-like tools to find usages/references of a symbol | `leta refs <symbol_name>` |
 | Use ripgrep-like tools to see where a function is imported/wired up | `leta refs <symbol_name>` |
@@ -46,6 +48,7 @@ If you're tempted to do this, ask yourself: *What symbol am I actually looking f
 - `leta show <symbol>` if you know the symbol name
 - `leta grep ".*" path/to/file -k function,method` to see what functions exist in a file
 - `leta refs <symbol>` to find where something is used
+- `leta read <path>` if the file has no symbols (config, docs, generated code) or you need an exact line range
 
 ### ⚠️ Anti-pattern: "I want to see where this is imported/wired up"
 
@@ -63,6 +66,7 @@ When you think "I want to see where this function is imported" or "how is this v
 - Semantic refactoring (rename symbol across codebase)
 - Exploring project structure with symbol information
 - Viewing a symbol's implementation when you know its name
+- Reading a file or line range, including config, docs, and generated files → use `leta read`
 
 **Use ripgrep-like tools for:**
 - Searching for **literal strings in comments, docs, or config files** (not code)
@@ -195,6 +199,33 @@ leta files -x test -x vendor
 # Only show Python files
 leta files -f '\.py$'
 ```
+
+### `leta read` - Read a File or Line Range
+
+Print a file with line numbers. Unlike `leta show`, this does not resolve symbols
+and does not need a workspace or language server. Use it for config files,
+documentation, generated code, and other files without symbols. Prefer
+`leta show` when you know the symbol name.
+
+```bash
+# Read a whole file
+leta read src/main.py
+
+# Read a line range
+leta read src/main.py --start-line 40 --end-line 80
+
+# Limit output for a large file
+leta read README.md --head 100
+
+# Print exact content without line numbers
+leta read pyproject.toml --raw
+```
+
+**Options:**
+- `-s, --start-line N` - First line to read (1-based, default: 1)
+- `-e, --end-line N` - Last line to read, inclusive (default: EOF)
+- `-N, --head N` - Maximum lines to print (default: 2000, 0 = unlimited)
+- `--raw` - Print selected lines without a header or line numbers
 
 ### `leta refs` - Find All References ⭐ USE THIS INSTEAD OF RIPGREP FOR USAGES
 

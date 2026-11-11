@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use leta_config::{get_log_dir, get_socket_path, is_daemon_running, Config};
+use leta_fs::{read_file_content, slice_lines, TextError};
 use leta_output::*;
 use leta_types::{DEFAULT_HEAD_LIMIT, *};
 use serde_json::{json, Value};
@@ -46,6 +47,10 @@ looking for specific multi-symbol strings, puncuation, or library functions.
 Use `leta show SYMBOL` to print the full body of a symbol. Use `leta refs
 SYMBOL` to find all uses of a symbol. These two (and other) commands accept
 `--context N` for surrounding lines.
+
+Use `leta read PATH` to print a file or line range with line numbers. It does
+not need a workspace or language server, which makes it useful for config,
+documentation, and other files without symbols.
 
 Use `leta replace SYMBOL` to replace a symbol definition with new source
 read from stdin or a file.
@@ -104,6 +109,20 @@ enum Commands {
         filter: Option<String>,
         #[arg(short = 'N', long, default_value_t = DEFAULT_HEAD_LIMIT, help = "Maximum files (0 = unlimited)")]
         head: u32,
+    },
+
+    #[command(about = "Print a file or line range with line numbers.")]
+    Read {
+        #[arg(help = "File to read")]
+        path: String,
+        #[arg(short = 's', long, default_value_t = 1, help = "First line to read (1-based)")]
+        start_line: u32,
+        #[arg(short = 'e', long, help = "Last line to read (inclusive)")]
+        end_line: Option<u32>,
+        #[arg(short = 'N', long, default_value_t = DEFAULT_READ_HEAD_LIMIT, help = "Maximum lines (0 = unlimited)")]
+        head: u32,
+        #[arg(long, help = "Print selected lines without header or line numbers")]
+        raw: bool,
     },
 
     #[command(about = "Print the definition of a symbol.")]
@@ -387,6 +406,13 @@ async fn main() -> Result<()> {
         Commands::Workspace { command } => handle_workspace_command(command).await,
         Commands::Config => handle_config(),
         Commands::HelpAll => handle_help_all(),
+        Commands::Read {
+            path,
+            start_line,
+            end_line,
+            head,
+            raw,
+        } => handle_read(cli.json, path, start_line, end_line, head, raw),
         _ => {
             ensure_daemon_running().await?;
             let config = Config::load()?;
@@ -638,6 +664,90 @@ fn handle_help_all() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn handle_read(
+    json_output: bool,
+    path: String,
+    start_line: u32,
+    end_line: Option<u32>,
+    head: u32,
+    raw: bool,
+) -> Result<()> {
+    let profile_span = profile_start("read");
+    let file_path = PathBuf::from(&path);
+
+    if !file_path.exists() {
+        return Err(anyhow!("File not found: {}", path));
+    }
+
+    let metadata = std::fs::metadata(&file_path)
+        .map_err(|e| anyhow!("Failed to read {}: {}", path, e))?;
+
+    if metadata.is_dir() {
+        return Err(anyhow!(
+            "Not a file: {} (use `leta files {}` to list directories)",
+            path,
+            path
+        ));
+    }
+    if !metadata.is_file() {
+        return Err(anyhow!("Not a file: {}", path));
+    }
+
+    let content = read_file_content(&file_path).map_err(|e| match e {
+        TextError::Utf8(_) => anyhow!(
+            "File is not valid UTF-8 (binary files are not supported): {}",
+            path
+        ),
+        other => anyhow!("Failed to read {}: {}", path, other),
+    })?;
+
+    let slice = slice_lines(&content, start_line, end_line, head).map_err(|e| anyhow!("{}", e))?;
+    let display = display_path(&file_path, &path);
+
+    let result = ReadResult::new(
+        display.clone(),
+        slice.start_line,
+        slice.end_line,
+        slice.total_lines,
+        slice.content.clone(),
+        slice.truncated,
+        slice.next_start_line,
+    );
+
+    if json_output {
+        println!("{}", serde_json::to_string_pretty(&result)?);
+    } else if raw {
+        if !result.content.is_empty() {
+            println!("{}", result.content);
+        }
+        if result.truncated {
+            let command_base = format!("leta read \"{}\"", display);
+            eprintln!("{}", format_read_truncation(&result, head, &command_base));
+        }
+    } else {
+        let command_base = format!("leta read \"{}\"", display);
+        println!("{}", format_read_result(&result, head, &command_base));
+    }
+
+    profile_end(profile_span);
+    Ok(())
+}
+
+fn display_path(file_path: &Path, original: &str) -> String {
+    let canonical = file_path
+        .canonicalize()
+        .unwrap_or_else(|_| file_path.to_path_buf());
+
+    if let Ok(cwd) = std::env::current_dir() {
+        let cwd = cwd.canonicalize().unwrap_or(cwd);
+        if let Ok(relative) = canonical.strip_prefix(&cwd) {
+            return relative.to_string_lossy().to_string();
+        }
+    }
+
+    original.to_string()
 }
 
 async fn ensure_daemon_running() -> Result<()> {

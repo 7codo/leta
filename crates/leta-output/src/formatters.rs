@@ -238,6 +238,47 @@ pub fn format_show_result(result: &ShowResult, head: u32) -> String {
     lines.join("\n")
 }
 
+pub fn format_read_result(result: &ReadResult, head: u32, command_base: &str) -> String {
+    if result.total_lines == 0 {
+        return format!("{}\n\n(empty file)", result.path);
+    }
+
+    let location = if result.start_line == result.end_line {
+        format!("{}:{}", result.path, result.start_line)
+    } else {
+        format!("{}:{}-{}", result.path, result.start_line, result.end_line)
+    };
+
+    let width = result.end_line.to_string().len();
+    let mut lines = vec![location, String::new()];
+    for (offset, line) in result.content.split('\n').enumerate() {
+        let line_number = result.start_line + offset as u32;
+        lines.push(format!("{:>width$}: {}", line_number, line, width = width));
+    }
+
+    if result.truncated {
+        lines.push(String::new());
+        lines.push(format_read_truncation(result, head, command_base));
+    }
+
+    lines.join("\n")
+}
+
+pub fn format_read_truncation(result: &ReadResult, head: u32, command_base: &str) -> String {
+    let next = result.next_start_line.unwrap_or(result.end_line + 1);
+    let next_head = head.saturating_mul(2).max(1);
+    format!(
+        "[truncated after {} of {} lines, use `{} --start-line {} --head {}` to read more, or `{} --start-line {} -N0` to read all]",
+        result.end_line - result.start_line + 1,
+        result.total_lines,
+        command_base,
+        next,
+        next_head,
+        command_base,
+        next
+    )
+}
+
 pub fn format_rename_result(result: &RenameResult) -> String {
     let mut files: Vec<_> = result.files_changed.iter().collect();
     files.sort();
@@ -1649,4 +1690,68 @@ fn language_from_path(path: &str) -> String {
         _ => ext,
     }
     .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn read_result(
+        start_line: u32,
+        end_line: u32,
+        total_lines: u32,
+        content: &str,
+        truncated: bool,
+        next_start_line: Option<u32>,
+    ) -> ReadResult {
+        ReadResult::new(
+            "src/main.rs".to_string(),
+            start_line,
+            end_line,
+            total_lines,
+            content.to_string(),
+            truncated,
+            next_start_line,
+        )
+    }
+
+    #[test]
+    fn formats_line_numbers_with_aligned_width() {
+        let result = read_result(8, 10, 10, "eight\nnine\nten", false, None);
+        let output = format_read_result(&result, 0, "leta read \"src/main.rs\"");
+        assert_eq!(
+            output,
+            "src/main.rs:8-10\n\n 8: eight\n 9: nine\n10: ten"
+        );
+    }
+
+    #[test]
+    fn formats_single_line_range() {
+        let result = read_result(3, 3, 10, "three", false, None);
+        let output = format_read_result(&result, 0, "leta read \"src/main.rs\"");
+        assert_eq!(output, "src/main.rs:3\n\n3: three");
+    }
+
+    #[test]
+    fn formats_empty_file() {
+        let result = read_result(1, 0, 0, "", false, None);
+        let output = format_read_result(&result, 0, "leta read \"src/main.rs\"");
+        assert_eq!(output, "src/main.rs\n\n(empty file)");
+    }
+
+    #[test]
+    fn preserves_trailing_empty_lines() {
+        let result = read_result(1, 2, 2, "alpha\n", false, None);
+        let output = format_read_result(&result, 0, "leta read \"src/main.rs\"");
+        assert_eq!(output, "src/main.rs:1-2\n\n1: alpha\n2: ");
+    }
+
+    #[test]
+    fn formats_truncation_notice() {
+        let result = read_result(1, 2, 10, "one\ntwo", true, Some(3));
+        let output = format_read_result(&result, 2, "leta read \"src/main.rs\"");
+        assert!(output.contains("[truncated after 2 of 10 lines"));
+        assert!(output.contains("--start-line 3 --head 4"));
+        assert!(output.contains("--start-line 3 -N0"));
+    }
 }
