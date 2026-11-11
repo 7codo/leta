@@ -1,0 +1,39 @@
+===
+create help
+===
+leta create --help
+---
+Create files and directories.
+
+Usage: leta create [OPTIONS] <COMMAND>
+
+Commands:
+  file  Create a new file from stdin, --body, or --file.
+  dir   Create a directory, including missing parents.
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --json     Output as JSON
+      --profile  Print timing information for profiling
+  -h, --help     Print help
+
+===
+create file help
+===
+leta create file --help
+---
+Create a new file from stdin, --body, or --file.
+
+Usage: leta create file [OPTIONS] <PATH>
+
+Arguments:
+  <PATH>  File to create
+
+Options:
+      --body <BODY>  File content (inline)
+      --file <FILE>  Read content from FILE ('-' reads stdin)
+      --force        Overwrite the file if it already exists
+      --dry-run      Show what would change without writing
+      --json         Output as JSON
+      --profile      Print timing information for profiling
+  -h, --help         Print help

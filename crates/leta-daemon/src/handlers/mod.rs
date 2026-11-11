@@ -1,4 +1,5 @@
 mod calls;
+mod create;
 mod files;
 mod graph;
 mod grep;
@@ -24,6 +25,7 @@ use leta_lsp::lsp_types::{DocumentSymbol, DocumentSymbolResponse, Location, Symb
 use leta_types::{CacheStats, LocationInfo, SymbolInfo, SymbolKind};
 
 pub use calls::handle_calls;
+pub use create::handle_create_file;
 pub use files::{handle_files, handle_files_streaming};
 pub use graph::handle_graph;
 pub use grep::{get_file_symbols, handle_grep, handle_grep_streaming};

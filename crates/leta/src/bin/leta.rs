@@ -62,6 +62,10 @@ Use `leta delete-lines PATH START [END]`, `leta insert-at-line PATH LINE`, and
 `leta replace-lines PATH START [END]` for edits by line number instead of
 symbol name.
 
+Use `leta create file PATH` to create a new file from stdin, `--body`, or
+`--file`, and `leta create dir PATH` to create directories. Missing parent
+directories are created automatically.
+
 See `leta COMMAND --help` for more documentation and command-specific options."#;
 
 #[derive(Parser)]
@@ -115,7 +119,12 @@ enum Commands {
     Read {
         #[arg(help = "File to read")]
         path: String,
-        #[arg(short = 's', long, default_value_t = 1, help = "First line to read (1-based)")]
+        #[arg(
+            short = 's',
+            long,
+            default_value_t = 1,
+            help = "First line to read (1-based)"
+        )]
         start_line: u32,
         #[arg(short = 'e', long, help = "Last line to read (inclusive)")]
         end_line: Option<u32>,
@@ -334,6 +343,12 @@ enum Commands {
         new_path: String,
     },
 
+    #[command(about = "Create files and directories.")]
+    Create {
+        #[command(subcommand)]
+        command: CreateCommands,
+    },
+
     #[command(about = "Manage workspaces.")]
     Workspace {
         #[command(subcommand)]
@@ -389,6 +404,34 @@ enum WorkspaceCommands {
     Info,
 }
 
+#[derive(Subcommand)]
+enum CreateCommands {
+    #[command(about = "Create a new file from stdin, --body, or --file.")]
+    File {
+        #[arg(help = "File to create")]
+        path: String,
+        #[arg(long, help = "File content (inline)")]
+        body: Option<String>,
+        #[arg(
+            long,
+            conflicts_with = "body",
+            help = "Read content from FILE ('-' reads stdin)"
+        )]
+        file: Option<String>,
+        #[arg(long, help = "Overwrite the file if it already exists")]
+        force: bool,
+        #[arg(long, help = "Show what would change without writing")]
+        dry_run: bool,
+    },
+    #[command(about = "Create a directory, including missing parents.")]
+    Dir {
+        #[arg(help = "Directory to create")]
+        path: String,
+        #[arg(long, help = "Show what would change without writing")]
+        dry_run: bool,
+    },
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let total_start = profile_start("total");
@@ -410,6 +453,9 @@ async fn main() -> Result<()> {
             head,
             raw,
         } => handle_read(cli.json, path, start_line, end_line, head, raw),
+        Commands::Create {
+            command: CreateCommands::Dir { path, dry_run },
+        } => handle_create_dir(cli.json, path, dry_run),
         _ => {
             ensure_daemon_running().await?;
             let config = Config::load()?;
@@ -619,6 +665,16 @@ async fn main() -> Result<()> {
                 Commands::Mv { old_path, new_path } => {
                     handle_mv(&config, cli.json, old_path, new_path).await
                 }
+                Commands::Create {
+                    command:
+                        CreateCommands::File {
+                            path,
+                            body,
+                            file,
+                            force,
+                            dry_run,
+                        },
+                } => handle_create_file(&config, cli.json, path, body, file, force, dry_run).await,
                 _ => unreachable!(),
             }
         }
@@ -676,8 +732,8 @@ fn handle_read(
         return Err(anyhow!("File not found: {}", path));
     }
 
-    let metadata = std::fs::metadata(&file_path)
-        .map_err(|e| anyhow!("Failed to read {}: {}", path, e))?;
+    let metadata =
+        std::fs::metadata(&file_path).map_err(|e| anyhow!("Failed to read {}: {}", path, e))?;
 
     if metadata.is_dir() {
         return Err(anyhow!(
@@ -727,6 +783,32 @@ fn handle_read(
     }
 
     profile_end(profile_span);
+    Ok(())
+}
+
+fn handle_create_dir(json_output: bool, path: String, dry_run: bool) -> Result<()> {
+    let dir_path = std::env::current_dir()?.join(&path);
+
+    if dir_path.exists() {
+        return Err(anyhow!("Path already exists: {}", path));
+    }
+
+    if !dry_run {
+        std::fs::create_dir_all(&dir_path)
+            .map_err(|e| anyhow!("Failed to create directory {}: {}", path, e))?;
+    }
+
+    let result = CreateDirResult {
+        created: !dry_run,
+        path: display_path(&dir_path, &path),
+        dry_run,
+    };
+
+    if json_output {
+        println!("{}", serde_json::to_string_pretty(&result)?);
+    } else {
+        println!("{}", format_create_dir_result(&result));
+    }
     Ok(())
 }
 
@@ -1914,6 +1996,23 @@ fn read_text_from_stdin() -> Result<String> {
     Ok(text)
 }
 
+fn read_create_content(body: Option<String>, file: Option<String>) -> Result<String> {
+    match (body, file) {
+        (Some(text), _) => Ok(text),
+        (None, Some(path)) if path == "-" => read_text_from_stdin(),
+        (None, Some(path)) => {
+            std::fs::read_to_string(&path).map_err(|e| anyhow!("Failed to read {}: {}", path, e))
+        }
+        (None, None) => {
+            if std::io::stdin().is_terminal() {
+                Ok(String::new())
+            } else {
+                read_text_from_stdin()
+            }
+        }
+    }
+}
+
 async fn handle_insert(
     config: &Config,
     json_output: bool,
@@ -2116,6 +2215,41 @@ async fn handle_mv(
         println!("{}", serde_json::to_string_pretty(&mv_result)?);
     } else {
         println!("{}", format_move_file_result(&mv_result));
+    }
+    Ok(())
+}
+
+async fn handle_create_file(
+    config: &Config,
+    json_output: bool,
+    path: String,
+    body: Option<String>,
+    file: Option<String>,
+    force: bool,
+    dry_run: bool,
+) -> Result<()> {
+    let content = read_create_content(body, file)?;
+    let file_path = std::env::current_dir()?.join(&path);
+    let workspace_root = get_workspace_root_for_path(config, &file_path)?;
+
+    let result = send_request(
+        "create-file",
+        json!({
+            "workspace_root": workspace_root.to_string_lossy(),
+            "path": file_path.to_string_lossy(),
+            "content": content,
+            "overwrite": force,
+            "dry_run": dry_run,
+        }),
+    )
+    .await?;
+
+    let create_result: CreateFileResult = serde_json::from_value(result)?;
+
+    if json_output {
+        println!("{}", serde_json::to_string_pretty(&create_result)?);
+    } else {
+        println!("{}", format_create_file_result(&create_result));
     }
     Ok(())
 }

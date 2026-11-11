@@ -1207,6 +1207,114 @@
       ]
     },
     {
+      "name": "create",
+      "about": "Create files and directories.",
+      "usage": "leta create <COMMAND>",
+      "requires_daemon": false,
+      "requires_workspace": false,
+      "rpc_methods": ["create-file"],
+      "streaming": false,
+      "json_output": true,
+      "arguments": [],
+      "options": [],
+      "subcommands": [
+        {
+          "name": "file",
+          "about": "Create a new file from stdin, --body, or --file.",
+          "usage": "leta create file [OPTIONS] <PATH>",
+          "requires_daemon": true,
+          "requires_workspace": true,
+          "rpc_methods": ["create-file"],
+          "arguments": [
+            {
+              "name": "path",
+              "required": true,
+              "description": "File to create"
+            }
+          ],
+          "options": [
+            {
+              "name": "body",
+              "short": null,
+              "long": "--body",
+              "value_name": "BODY",
+              "takes_value": true,
+              "repeatable": false,
+              "default": null,
+              "description": "File content (inline)"
+            },
+            {
+              "name": "file",
+              "short": null,
+              "long": "--file",
+              "value_name": "FILE",
+              "takes_value": true,
+              "repeatable": false,
+              "default": null,
+              "conflicts_with": "body",
+              "description": "Read content from FILE ('-' reads stdin)"
+            },
+            {
+              "name": "force",
+              "short": null,
+              "long": "--force",
+              "takes_value": false,
+              "repeatable": false,
+              "default": false,
+              "description": "Overwrite the file if it already exists"
+            },
+            {
+              "name": "dry_run",
+              "short": null,
+              "long": "--dry-run",
+              "takes_value": false,
+              "repeatable": false,
+              "default": false,
+              "description": "Show what would change without writing"
+            }
+          ],
+          "notes": [
+            "Without --body or --file, content is read from stdin when it is not a terminal; otherwise an empty file is created.",
+            "--body conflicts with --file.",
+            "Missing parent directories are created automatically.",
+            "Fails if the file exists unless --force is passed.",
+            "The workspace is resolved from the target path and must contain it."
+          ]
+        },
+        {
+          "name": "dir",
+          "about": "Create a directory, including missing parents.",
+          "usage": "leta create dir [OPTIONS] <PATH>",
+          "requires_daemon": false,
+          "requires_workspace": false,
+          "rpc_methods": [],
+          "arguments": [
+            {
+              "name": "path",
+              "required": true,
+              "description": "Directory to create"
+            }
+          ],
+          "options": [
+            {
+              "name": "dry_run",
+              "short": null,
+              "long": "--dry-run",
+              "takes_value": false,
+              "repeatable": false,
+              "default": false,
+              "description": "Show what would change without writing"
+            }
+          ],
+          "notes": [
+            "Missing parent directories are created automatically.",
+            "Fails if the path already exists."
+          ]
+        }
+      ],
+      "notes": []
+    },
+    {
       "name": "workspace",
       "about": "Manage workspaces.",
       "usage": "leta workspace <COMMAND>",
@@ -2321,6 +2429,47 @@
         "result": {
           "files_changed": "string[]",
           "imports_updated": "boolean"
+        }
+      },
+      {
+        "method": "create-file",
+        "description": "Create a new file (or overwrite an existing one) and notify the language server.",
+        "streaming": false,
+        "params": {
+          "workspace_root": {
+            "type": "string",
+            "required": true,
+            "description": "Workspace root that must contain the target path."
+          },
+          "path": {
+            "type": "string",
+            "required": true,
+            "description": "Absolute path of the file to create."
+          },
+          "content": {
+            "type": "string",
+            "required": true,
+            "description": "Content to write; may be empty."
+          },
+          "overwrite": {
+            "type": "boolean",
+            "required": false,
+            "default": false,
+            "description": "Overwrite the file if it already exists."
+          },
+          "dry_run": {
+            "type": "boolean",
+            "required": false,
+            "default": false,
+            "description": "Validate and report the change without writing."
+          }
+        },
+        "result": {
+          "created": "boolean",
+          "overwritten": "boolean",
+          "path": "string",
+          "line_count": "number",
+          "dry_run": "boolean"
         }
       },
       {

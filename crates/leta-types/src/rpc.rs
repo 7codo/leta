@@ -726,6 +726,39 @@ pub struct MoveFileResult {
 }
 
 // ============================================================================
+// Create File
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateFileParams {
+    pub workspace_root: String,
+    pub path: String,
+    pub content: String,
+    #[serde(default)]
+    pub overwrite: bool,
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateFileResult {
+    pub created: bool,
+    pub overwritten: bool,
+    pub path: String,
+    pub line_count: u32,
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateDirResult {
+    pub created: bool,
+    pub path: String,
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+// ============================================================================
 // Raw LSP Request
 // ============================================================================
 

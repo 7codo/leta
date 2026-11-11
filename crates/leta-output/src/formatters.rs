@@ -424,6 +424,37 @@ pub fn format_move_file_result(result: &MoveFileResult) -> String {
     }
 }
 
+pub fn format_create_file_result(result: &CreateFileResult) -> String {
+    let verb = if result.dry_run {
+        if result.overwritten {
+            "Would overwrite"
+        } else {
+            "Would create"
+        }
+    } else if result.overwritten {
+        "Overwrote"
+    } else {
+        "Created"
+    };
+    let lines = if result.line_count == 1 {
+        "line"
+    } else {
+        "lines"
+    };
+
+    format!("{} {} ({} {})", verb, result.path, result.line_count, lines)
+}
+
+pub fn format_create_dir_result(result: &CreateDirResult) -> String {
+    let verb = if result.dry_run {
+        "Would create directory"
+    } else {
+        "Created directory"
+    };
+
+    format!("{} {}", verb, result.path)
+}
+
 pub fn format_restart_workspace_result(result: &RestartWorkspaceResult) -> String {
     format!(
         "Restarted {} server(s): {}",
@@ -1719,10 +1750,7 @@ mod tests {
     fn formats_line_numbers_with_aligned_width() {
         let result = read_result(8, 10, 10, "eight\nnine\nten", false, None);
         let output = format_read_result(&result, 0, "leta read \"src/main.rs\"");
-        assert_eq!(
-            output,
-            "src/main.rs:8-10\n\n 8: eight\n 9: nine\n10: ten"
-        );
+        assert_eq!(output, "src/main.rs:8-10\n\n 8: eight\n 9: nine\n10: ten");
     }
 
     #[test]

@@ -38,3 +38,6 @@ memchr = { workspace = true }
 memmap2 = { workspace = true }
 ignore.workspace = true
 fastrace = { version = "0.7", features = ["enable"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }

@@ -34,6 +34,10 @@ Use `leta delete-lines PATH START [END]`, `leta insert-at-line PATH LINE`, and
 `leta replace-lines PATH START [END]` for edits by line number instead of
 symbol name.
 
+Use `leta create file PATH` to create a new file from stdin, `--body`, or
+`--file`, and `leta create dir PATH` to create directories. Missing parent
+directories are created automatically.
+
 See `leta COMMAND --help` for more documentation and command-specific options.
 
 Usage: leta [OPTIONS] <COMMAND>
@@ -58,6 +62,7 @@ Commands:
   insert-at-line   Insert content at a given line in a file.
   replace-lines    Replace a range of lines within a file with new content.
   mv               Move/rename a file and update all imports.
+  create           Create files and directories.
   workspace        Manage workspaces.
   daemon           Manage the leta daemon.
   config           Print config file location and contents.

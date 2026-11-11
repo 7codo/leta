@@ -1,0 +1,84 @@
+===
+create file with body
+===
+leta create file new/hello.py --body 'x = 1'
+---
+Created new/hello.py (1 line)
+
+===
+create file refuses to overwrite
+===
+leta create file new/hello.py --body 'x = 2' 2>&1 | sed "s|$CCTR_FIXTURE_DIR|.|"
+---
+Error: File already exists: ./new/hello.py (use --force to overwrite)
+
+===
+refused overwrite leaves content unchanged
+===
+leta read new/hello.py
+---
+new/hello.py:1
+
+1: x = 1
+
+===
+force overwrites file
+===
+leta create file new/hello.py --body 'x = 2' --force
+---
+Overwrote new/hello.py (1 line)
+
+===
+create file from file input
+===
+leta create file new/from_file.py --file main.py
+---
+Created new/from_file.py (2 lines)
+
+===
+create file dry run
+===
+leta create file new/dry.py --body 'y = 2' --dry-run
+---
+Would create new/dry.py (1 line)
+
+===
+dry run created nothing
+===
+leta read new/dry.py
+---
+Error: File not found: new/dry.py
+
+===
+create file json output
+===
+leta create file new/json.py --body 'z = 3' --json
+---
+{
+  "created": true,
+  "overwritten": false,
+  "path": "new/json.py",
+  "line_count": 1,
+  "dry_run": false
+}
+
+===
+create directory with parents
+===
+leta create dir new/deep/dir
+---
+Created directory new/deep/dir
+
+===
+create dir fails when it exists
+===
+leta create dir new/deep/dir
+---
+Error: Path already exists: new/deep/dir
+
+===
+create dir dry run
+===
+leta create dir dry/dir --dry-run
+---
+Would create directory dry/dir
