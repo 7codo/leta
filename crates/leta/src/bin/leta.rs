@@ -159,7 +159,7 @@ enum Commands {
         head: u32,
     },
 
-    #[command(about = "Show workspace call graph (depth-limited by default).")]
+    #[command(about = "Show workspace call graph.")]
     Graph {
         #[arg(long, help = "Include stdlib/dependency calls")]
         include_non_workspace: bool,
@@ -173,12 +173,9 @@ enum Commands {
         include_tests: bool,
         #[arg(
             long,
-            default_value_t = 1,
-            help = "Call tree depth from roots (0 = roots only, 1 = roots + direct callees)"
+            help = "Call tree depth from roots (0 = roots only, 1 = roots + direct callees). Omit for all depths"
         )]
-        depth: u32,
-        #[arg(long, help = "Show all depths (ignore --depth)")]
-        all_depths: bool,
+        depth: Option<u32>,
     },
 
     #[command(about = "Find implementations of an interface or abstract method.")]
@@ -517,7 +514,6 @@ async fn main() -> Result<()> {
                     include_path,
                     include_tests,
                     depth,
-                    all_depths,
                 } => {
                     handle_graph(
                         &config,
@@ -528,7 +524,6 @@ async fn main() -> Result<()> {
                         include_path,
                         include_tests,
                         depth,
-                        all_depths,
                     )
                     .await
                 }
@@ -1781,8 +1776,7 @@ async fn handle_graph(
     exclude_path: Vec<String>,
     include_path: Vec<String>,
     include_tests: bool,
-    depth: u32,
-    all_depths: bool,
+    depth: Option<u32>,
 ) -> Result<()> {
     let workspace_root = get_workspace_root(config)?;
 
@@ -1799,7 +1793,7 @@ async fn handle_graph(
     .await?;
 
     let graph_result: GraphResult = serde_json::from_value(result)?;
-    let max_depth = if all_depths { u32::MAX } else { depth };
+    let max_depth = depth.unwrap_or(u32::MAX);
 
     if json_output {
         let limited = limit_graph_depth(&graph_result, max_depth);

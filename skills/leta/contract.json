@@ -1,0 +1,2433 @@
+{
+  "name": "leta",
+  "binary": "leta",
+  "daemon_binary": "leta-daemon",
+  "version": "0.13.0",
+  "description": "Leta (LSP Enabled Tools for Agents) is a command line LSP client. It searches for symbols across large code bases with regular expressions, prints full function and method bodies, finds references, implementations, subtypes, call hierarchies, and performs semantic refactoring such as renaming symbols across the entire code base.",
+  "conventions": {
+    "line_numbers": "All line numbers are 1-based unless stated otherwise.",
+    "ranges": "Line ranges are inclusive. END defaults to START for commands that take an optional END.",
+    "head_limit": "0 means unlimited.",
+    "text_input": "Commands that accept --body and --file read stdin when neither is provided and stdin is not a terminal. --file '-' also reads stdin. --body conflicts with --file.",
+    "json_output": "The global --json flag prints the command's RPC result object as pretty JSON. Commands that require no daemon do not support it.",
+    "type_expressions": "Types in params and results use simple expressions: string, number, boolean, Name, Name[], map<string,Name>, Name|null. 'x|null' means the field may be absent or null.",
+    "required": "A param marked required must be present in the request. Optional params may be omitted and then take their default.",
+    "workspace_root": "Absolute path to a workspace root previously registered with `leta workspace add`."
+  },
+  "enums": {
+    "symbol_kind": {
+      "description": "Symbol kinds as reported by LSP servers. Accepted case-insensitively by --kind.",
+      "values": [
+        "File",
+        "Module",
+        "Namespace",
+        "Package",
+        "Class",
+        "Method",
+        "Property",
+        "Field",
+        "Constructor",
+        "Enum",
+        "Interface",
+        "Function",
+        "Variable",
+        "Constant",
+        "String",
+        "Number",
+        "Boolean",
+        "Array",
+        "Object",
+        "Key",
+        "Null",
+        "EnumMember",
+        "Struct",
+        "Event",
+        "Operator",
+        "TypeParameter"
+      ]
+    },
+    "calls_mode": {
+      "description": "Call hierarchy direction. Chosen automatically by the CLI: both --from and --to gives 'path', only --from gives 'outgoing', only --to gives 'incoming'.",
+      "values": ["outgoing", "incoming", "path"]
+    },
+    "insert_position": {
+      "description": "Where to insert new source relative to the target symbol.",
+      "values": ["before", "after"]
+    }
+  },
+  "global_options": [
+    {
+      "long": "--json",
+      "short": null,
+      "takes_value": false,
+      "default": false,
+      "description": "Output as JSON"
+    },
+    {
+      "long": "--profile",
+      "short": null,
+      "takes_value": false,
+      "default": false,
+      "description": "Print timing information for profiling"
+    },
+    {
+      "long": "--help",
+      "short": "-h",
+      "takes_value": false,
+      "default": false,
+      "description": "Print help"
+    },
+    {
+      "long": "--version",
+      "short": "-V",
+      "takes_value": false,
+      "default": false,
+      "description": "Print version"
+    }
+  ],
+  "types": {
+    "SymbolInfo": {
+      "name": "string",
+      "kind": "string",
+      "path": "string",
+      "line": "number",
+      "column": "number",
+      "container": "string|null",
+      "detail": "string|null",
+      "range_start_line": "number|null",
+      "range_end_line": "number|null",
+      "ref": "string|null"
+    },
+    "LocationInfo": {
+      "path": "string",
+      "line": "number",
+      "column": "number",
+      "context_lines": "string[]|null",
+      "context_start": "number|null",
+      "name": "string|null",
+      "kind": "string|null",
+      "detail": "string|null"
+    },
+    "FileInfo": {
+      "path": "string",
+      "lines": "number",
+      "bytes": "number"
+    },
+    "CacheInfo": {
+      "current_bytes": "number",
+      "max_bytes": "number",
+      "entries": "number"
+    },
+    "WorkspaceInfo": {
+      "root": "string",
+      "language": "string",
+      "server_pid": "number|null",
+      "open_documents": "string[]"
+    },
+    "CallNode": {
+      "name": "string",
+      "kind": "string|null",
+      "detail": "string|null",
+      "path": "string|null",
+      "line": "number|null",
+      "column": "number|null",
+      "in_workspace": "boolean",
+      "calls": "CallNode[]|null",
+      "called_by": "CallNode[]|null"
+    },
+    "CallGraphSymbol": {
+      "name": "string",
+      "kind": "string",
+      "path": "string",
+      "line": "number",
+      "column": "number",
+      "detail": "string|null"
+    },
+    "CallGraphEdge": {
+      "caller": "CallGraphSymbol",
+      "callee": "CallGraphSymbol",
+      "in_workspace": "boolean",
+      "call_site_line": "number|null"
+    },
+    "GraphResult": {
+      "nodes": "CallGraphSymbol[]",
+      "edges": "CallGraphEdge[]",
+      "indexing_time_ms": "number|null",
+      "error": "string|null"
+    },
+    "StreamDone": {
+      "warning": "string|null",
+      "truncated": "boolean",
+      "total_count": "number",
+      "profiling": "ProfilingData|null"
+    },
+    "FunctionStats": {
+      "name": "string",
+      "calls": "number",
+      "total_us": "number",
+      "avg_us": "number",
+      "p90_us": "number",
+      "max_us": "number"
+    },
+    "CacheStats": {
+      "symbol_hits": "number",
+      "symbol_misses": "number",
+      "hover_hits": "number",
+      "hover_misses": "number"
+    },
+    "SpanNode": {
+      "name": "string",
+      "self_us": "number",
+      "total_us": "number",
+      "calls": "number",
+      "children": "SpanNode[]",
+      "is_parallel": "boolean",
+      "properties": "array"
+    },
+    "SpanTree": {
+      "roots": "SpanNode[]",
+      "total_us": "number",
+      "functions": "FunctionStats[]"
+    },
+    "ProfilingData": {
+      "functions": "FunctionStats[]",
+      "cache": "CacheStats",
+      "span_tree": "SpanTree|null"
+    },
+    "ServerStartupStats": {
+      "server_name": "string",
+      "workspace_root": "string",
+      "init_time_ms": "number",
+      "ready_time_ms": "number",
+      "total_time_ms": "number",
+      "functions": "FunctionStats[]"
+    },
+    "ServerIndexingStats": {
+      "server_name": "string",
+      "file_count": "number",
+      "total_time_ms": "number",
+      "functions": "FunctionStats[]",
+      "cache": "CacheStats"
+    },
+    "ServerProfilingData": {
+      "server_name": "string",
+      "startup": "ServerStartupStats|null",
+      "indexing": "ServerIndexingStats|null"
+    },
+    "WorkspaceProfilingData": {
+      "workspace_root": "string",
+      "total_files": "number",
+      "total_time_ms": "number",
+      "server_profiles": "ServerProfilingData[]"
+    }
+  },
+  "commands": [
+    {
+      "name": "grep",
+      "about": "Search for symbols matching a regex pattern.",
+      "usage": "leta grep [OPTIONS] <PATTERN> [PATH]",
+      "requires_daemon": true,
+      "requires_workspace": true,
+      "rpc_methods": ["grep"],
+      "streaming": true,
+      "json_output": true,
+      "arguments": [
+        {
+          "name": "pattern",
+          "required": true,
+          "description": "Regex pattern to match against symbol names"
+        },
+        {
+          "name": "path",
+          "required": false,
+          "description": "Regex to filter file paths (e.g. '\\.py$', 'models/', 'test')"
+        }
+      ],
+      "options": [
+        {
+          "name": "kind",
+          "short": "-k",
+          "long": "--kind",
+          "value_name": "TEXT",
+          "takes_value": true,
+          "repeatable": false,
+          "default": null,
+          "description": "Filter by kind (comma-separated)"
+        },
+        {
+          "name": "exclude",
+          "short": "-x",
+          "long": "--exclude",
+          "value_name": "TEXT",
+          "takes_value": true,
+          "repeatable": true,
+          "default": [],
+          "description": "Exclude pattern"
+        },
+        {
+          "name": "case_sensitive",
+          "short": "-C",
+          "long": "--case-sensitive",
+          "takes_value": false,
+          "repeatable": false,
+          "default": false,
+          "description": "Case-sensitive matching"
+        },
+        {
+          "name": "head",
+          "short": "-N",
+          "long": "--head",
+          "value_name": "N",
+          "takes_value": true,
+          "repeatable": false,
+          "default": 500,
+          "description": "Maximum results (0 = unlimited)"
+        }
+      ],
+      "subcommands": [],
+      "notes": [
+        "Only symbol names declared in the workspace are searched, never file contents.",
+        "Matching is case-insensitive unless -C/--case-sensitive is given.",
+        "Prints a warning when the pattern contains a space, since leta grep is not a text search.",
+        "Streams results as they are found unless --json or --profile is used."
+      ]
+    },
+    {
+      "name": "files",
+      "about": "Show source file tree with symbol and line counts.",
+      "usage": "leta files [OPTIONS] [PATH]",
+      "requires_daemon": true,
+      "requires_workspace": true,
+      "rpc_methods": ["files"],
+      "streaming": true,
+      "json_output": true,
+      "arguments": [
+        {
+          "name": "path",
+          "required": false,
+          "description": "Path to list"
+        }
+      ],
+      "options": [
+        {
+          "name": "exclude",
+          "short": "-x",
+          "long": "--exclude",
+          "value_name": "TEXT",
+          "takes_value": true,
+          "repeatable": true,
+          "default": [],
+          "description": "Exclude pattern"
+        },
+        {
+          "name": "include",
+          "short": "-i",
+          "long": "--include",
+          "value_name": "TEXT",
+          "takes_value": true,
+          "repeatable": true,
+          "default": [],
+          "description": "Include default-excluded dirs"
+        },
+        {
+          "name": "filter",
+          "short": "-f",
+          "long": "--filter",
+          "value_name": "TEXT",
+          "takes_value": true,
+          "repeatable": false,
+          "default": null,
+          "description": "Filter files by regex pattern"
+        },
+        {
+          "name": "head",
+          "short": "-N",
+          "long": "--head",
+          "value_name": "N",
+          "takes_value": true,
+          "repeatable": false,
+          "default": 500,
+          "description": "Maximum files (0 = unlimited)"
+        }
+      ],
+      "subcommands": [],
+      "notes": [
+        "Without PATH the workspace is resolved from the current directory. With PATH the workspace is resolved from that path.",
+        "Directories such as .git and __pycache__ are excluded by default; -i re-includes a matching directory.",
+        "Streams the tree as it is built unless --json or --profile is used."
+      ]
+    },
+    {
+      "name": "read",
+      "about": "Print a file or line range with line numbers.",
+      "usage": "leta read [OPTIONS] <PATH>",
+      "requires_daemon": false,
+      "requires_workspace": false,
+      "rpc_methods": [],
+      "streaming": false,
+      "json_output": true,
+      "arguments": [
+        {
+          "name": "path",
+          "required": true,
+          "description": "File to read"
+        }
+      ],
+      "options": [
+        {
+          "name": "start_line",
+          "short": "-s",
+          "long": "--start-line",
+          "value_name": "N",
+          "takes_value": true,
+          "repeatable": false,
+          "default": 1,
+          "description": "First line to read (1-based)"
+        },
+        {
+          "name": "end_line",
+          "short": "-e",
+          "long": "--end-line",
+          "value_name": "N",
+          "takes_value": true,
+          "repeatable": false,
+          "default": null,
+          "description": "Last line to read (inclusive)"
+        },
+        {
+          "name": "head",
+          "short": "-N",
+          "long": "--head",
+          "value_name": "N",
+          "takes_value": true,
+          "repeatable": false,
+          "default": 2000,
+          "description": "Maximum lines (0 = unlimited)"
+        },
+        {
+          "name": "raw",
+          "short": null,
+          "long": "--raw",
+          "takes_value": false,
+          "repeatable": false,
+          "default": false,
+          "description": "Print selected lines without header or line numbers"
+        }
+      ],
+      "subcommands": [],
+      "notes": [
+        "Reads files directly from disk; no daemon, workspace, or language server is required.",
+        "The file must be valid UTF-8; binary files are rejected.",
+        "Passing a directory produces an error suggesting `leta files`.",
+        "Result fields: path, start_line, end_line, total_lines, content, truncated, next_start_line."
+      ]
+    },
+    {
+      "name": "show",
+      "about": "Print the definition of a symbol.",
+      "usage": "leta show [OPTIONS] <SYMBOL>",
+      "requires_daemon": true,
+      "requires_workspace": true,
+      "rpc_methods": ["resolve-symbol", "show"],
+      "streaming": false,
+      "json_output": true,
+      "arguments": [
+        {
+          "name": "symbol",
+          "required": true,
+          "description": "Symbol to show"
+        }
+      ],
+      "options": [
+        {
+          "name": "context",
+          "short": "-n",
+          "long": "--context",
+          "value_name": "N",
+          "takes_value": true,
+          "repeatable": false,
+          "default": 0,
+          "description": "Lines of context"
+        },
+        {
+          "name": "head",
+          "short": "-N",
+          "long": "--head",
+          "value_name": "N",
+          "takes_value": true,
+          "repeatable": false,
+          "default": 500,
+          "description": "Maximum lines (0 = unlimited)"
+        }
+      ],
+      "subcommands": [],
+      "notes": [
+        "Symbol formats: `Name`, `Parent.Name`, `path:Name`, `path:Parent.Name`.",
+        "Ambiguous symbols produce a disambiguation list on stderr; qualify the symbol to disambiguate."
+      ]
+    },
+    {
+      "name": "refs",
+      "about": "Find all references to a symbol.",
+      "usage": "leta refs [OPTIONS] <SYMBOL>",
+      "requires_daemon": true,
+      "requires_workspace": true,
+      "rpc_methods": ["resolve-symbol", "references"],
+      "streaming": false,
+      "json_output": true,
+      "arguments": [
+        {
+          "name": "symbol",
+          "required": true,
+          "description": "Symbol to find references for"
+        }
+      ],
+      "options": [
+        {
+          "name": "context",
+          "short": "-n",
+          "long": "--context",
+          "value_name": "N",
+          "takes_value": true,
+          "repeatable": false,
+          "default": 0,
+          "description": "Lines of context"
+        },
+        {
+          "name": "head",
+          "short": "-N",
+          "long": "--head",
+          "value_name": "N",
+          "takes_value": true,
+          "repeatable": false,
+          "default": 500,
+          "description": "Maximum results (0 = unlimited)"
+        }
+      ],
+      "subcommands": [],
+      "notes": []
+    },
+    {
+      "name": "calls",
+      "about": "Show call hierarchy for a symbol.",
+      "usage": "leta calls [OPTIONS]",
+      "requires_daemon": true,
+      "requires_workspace": true,
+      "rpc_methods": ["resolve-symbol", "calls"],
+      "streaming": false,
+      "json_output": true,
+      "arguments": [],
+      "options": [
+        {
+          "name": "from",
+          "short": null,
+          "long": "--from",
+          "value_name": "SYMBOL",
+          "takes_value": true,
+          "repeatable": false,
+          "default": null,
+          "description": "Starting symbol (outgoing calls)"
+        },
+        {
+          "name": "to",
+          "short": null,
+          "long": "--to",
+          "value_name": "SYMBOL",
+          "takes_value": true,
+          "repeatable": false,
+          "default": null,
+          "description": "Target symbol (incoming calls)"
+        },
+        {
+          "name": "max_depth",
+          "short": null,
+          "long": "--max-depth",
+          "value_name": "N",
+          "takes_value": true,
+          "repeatable": false,
+          "default": 3,
+          "description": "Maximum recursion depth"
+        },
+        {
+          "name": "include_non_workspace",
+          "short": null,
+          "long": "--include-non-workspace",
+          "takes_value": false,
+          "repeatable": false,
+          "default": false,
+          "description": "Include stdlib/dependency calls"
+        },
+        {
+          "name": "head",
+          "short": "-N",
+          "long": "--head",
+          "value_name": "N",
+          "takes_value": true,
+          "repeatable": false,
+          "default": 500,
+          "description": "Maximum results (0 = unlimited)"
+        }
+      ],
+      "subcommands": [],
+      "notes": [
+        "At least one of --from or --to must be specified.",
+        "--from only: outgoing calls. --to only: incoming calls. Both: shortest call path between them."
+      ]
+    },
+    {
+      "name": "graph",
+      "about": "Show workspace call graph.",
+      "usage": "leta graph [OPTIONS]",
+      "requires_daemon": true,
+      "requires_workspace": true,
+      "rpc_methods": ["graph"],
+      "streaming": false,
+      "json_output": true,
+      "arguments": [],
+      "options": [
+        {
+          "name": "include_non_workspace",
+          "short": null,
+          "long": "--include-non-workspace",
+          "takes_value": false,
+          "repeatable": false,
+          "default": false,
+          "description": "Include stdlib/dependency calls"
+        },
+        {
+          "name": "include_orphans",
+          "short": null,
+          "long": "--include-orphans",
+          "takes_value": false,
+          "repeatable": false,
+          "default": false,
+          "description": "Include symbols with no callers or callees"
+        },
+        {
+          "name": "exclude_path",
+          "short": "-x",
+          "long": "--exclude-path",
+          "value_name": "REGEX",
+          "takes_value": true,
+          "repeatable": true,
+          "default": [],
+          "description": "Exclude paths matching regex"
+        },
+        {
+          "name": "include_path",
+          "short": "-i",
+          "long": "--include-path",
+          "value_name": "REGEX",
+          "takes_value": true,
+          "repeatable": true,
+          "default": [],
+          "description": "Only include paths matching regex"
+        },
+        {
+          "name": "include_tests",
+          "short": null,
+          "long": "--include-tests",
+          "takes_value": false,
+          "repeatable": false,
+          "default": false,
+          "description": "Include test files (excluded by default)"
+        },
+        {
+          "name": "depth",
+          "short": null,
+          "long": "--depth",
+          "value_name": "N",
+          "takes_value": true,
+          "repeatable": false,
+          "default": null,
+          "description": "Call tree depth from roots (0 = roots only, 1 = roots + direct callees). Omit for all depths"
+        }
+      ],
+      "subcommands": [],
+      "notes": [
+        "The full graph is shown by default; --depth limits each tree client-side after the full graph is returned.",
+        "Test files are excluded unless --include-tests is given.",
+        "Trees are rooted at entry points (functions with no callers)."
+      ]
+    },
+    {
+      "name": "implementations",
+      "about": "Find implementations of an interface or abstract method.",
+      "usage": "leta implementations [OPTIONS] <SYMBOL>",
+      "requires_daemon": true,
+      "requires_workspace": true,
+      "rpc_methods": ["resolve-symbol", "implementations"],
+      "streaming": false,
+      "json_output": true,
+      "arguments": [
+        {
+          "name": "symbol",
+          "required": true,
+          "description": "Symbol to find implementations for"
+        }
+      ],
+      "options": [
+        {
+          "name": "context",
+          "short": "-n",
+          "long": "--context",
+          "value_name": "N",
+          "takes_value": true,
+          "repeatable": false,
+          "default": 0,
+          "description": "Lines of context"
+        },
+        {
+          "name": "head",
+          "short": "-N",
+          "long": "--head",
+          "value_name": "N",
+          "takes_value": true,
+          "repeatable": false,
+          "default": 500,
+          "description": "Maximum results (0 = unlimited)"
+        }
+      ],
+      "subcommands": [],
+      "notes": []
+    },
+    {
+      "name": "supertypes",
+      "about": "Find direct supertypes of a type.",
+      "usage": "leta supertypes [OPTIONS] <SYMBOL>",
+      "requires_daemon": true,
+      "requires_workspace": true,
+      "rpc_methods": ["resolve-symbol", "supertypes"],
+      "streaming": false,
+      "json_output": true,
+      "arguments": [
+        {
+          "name": "symbol",
+          "required": true,
+          "description": "Symbol to find supertypes for"
+        }
+      ],
+      "options": [
+        {
+          "name": "context",
+          "short": "-n",
+          "long": "--context",
+          "value_name": "N",
+          "takes_value": true,
+          "repeatable": false,
+          "default": 0,
+          "description": "Lines of context"
+        },
+        {
+          "name": "head",
+          "short": "-N",
+          "long": "--head",
+          "value_name": "N",
+          "takes_value": true,
+          "repeatable": false,
+          "default": 500,
+          "description": "Maximum results (0 = unlimited)"
+        }
+      ],
+      "subcommands": [],
+      "notes": []
+    },
+    {
+      "name": "subtypes",
+      "about": "Find direct subtypes of a type.",
+      "usage": "leta subtypes [OPTIONS] <SYMBOL>",
+      "requires_daemon": true,
+      "requires_workspace": true,
+      "rpc_methods": ["resolve-symbol", "subtypes"],
+      "streaming": false,
+      "json_output": true,
+      "arguments": [
+        {
+          "name": "symbol",
+          "required": true,
+          "description": "Symbol to find subtypes for"
+        }
+      ],
+      "options": [
+        {
+          "name": "context",
+          "short": "-n",
+          "long": "--context",
+          "value_name": "N",
+          "takes_value": true,
+          "repeatable": false,
+          "default": 0,
+          "description": "Lines of context"
+        },
+        {
+          "name": "head",
+          "short": "-N",
+          "long": "--head",
+          "value_name": "N",
+          "takes_value": true,
+          "repeatable": false,
+          "default": 500,
+          "description": "Maximum results (0 = unlimited)"
+        }
+      ],
+      "subcommands": [],
+      "notes": []
+    },
+    {
+      "name": "declaration",
+      "about": "Find declaration of a symbol.",
+      "usage": "leta declaration [OPTIONS] <SYMBOL>",
+      "requires_daemon": true,
+      "requires_workspace": true,
+      "rpc_methods": ["resolve-symbol", "declaration"],
+      "streaming": false,
+      "json_output": true,
+      "arguments": [
+        {
+          "name": "symbol",
+          "required": true,
+          "description": "Symbol to find declaration for"
+        }
+      ],
+      "options": [
+        {
+          "name": "context",
+          "short": "-n",
+          "long": "--context",
+          "value_name": "N",
+          "takes_value": true,
+          "repeatable": false,
+          "default": 0,
+          "description": "Lines of context"
+        },
+        {
+          "name": "head",
+          "short": "-N",
+          "long": "--head",
+          "value_name": "N",
+          "takes_value": true,
+          "repeatable": false,
+          "default": 500,
+          "description": "Maximum results (0 = unlimited)"
+        }
+      ],
+      "subcommands": [],
+      "notes": []
+    },
+    {
+      "name": "rename",
+      "about": "Rename a symbol across the workspace.",
+      "usage": "leta rename <SYMBOL> <NEW_NAME>",
+      "requires_daemon": true,
+      "requires_workspace": true,
+      "rpc_methods": ["resolve-symbol", "rename"],
+      "streaming": false,
+      "json_output": true,
+      "arguments": [
+        {
+          "name": "symbol",
+          "required": true,
+          "description": "Symbol to rename"
+        },
+        {
+          "name": "new_name",
+          "required": true,
+          "description": "New name"
+        }
+      ],
+      "options": [],
+      "subcommands": [],
+      "notes": ["Updates all references to the symbol across the workspace."]
+    },
+    {
+      "name": "replace",
+      "about": "Replace a symbol definition with new contents from stdin or a file.",
+      "usage": "leta replace [OPTIONS] <SYMBOL>",
+      "requires_daemon": true,
+      "requires_workspace": true,
+      "rpc_methods": ["resolve-symbol", "replace"],
+      "streaming": false,
+      "json_output": true,
+      "arguments": [
+        {
+          "name": "symbol",
+          "required": true,
+          "description": "Symbol to replace"
+        }
+      ],
+      "options": [
+        {
+          "name": "body",
+          "short": null,
+          "long": "--body",
+          "value_name": "TEXT",
+          "takes_value": true,
+          "repeatable": false,
+          "default": null,
+          "description": "Replacement text (inline)"
+        },
+        {
+          "name": "file",
+          "short": null,
+          "long": "--file",
+          "value_name": "FILE",
+          "takes_value": true,
+          "repeatable": false,
+          "default": null,
+          "conflicts_with": "body",
+          "description": "Read replacement from FILE ('-' reads stdin)"
+        },
+        {
+          "name": "no_check_signature",
+          "short": null,
+          "long": "--no-check-signature",
+          "takes_value": false,
+          "repeatable": false,
+          "default": false,
+          "description": "Allow changing the function/method signature"
+        },
+        {
+          "name": "dry_run",
+          "short": null,
+          "long": "--dry-run",
+          "takes_value": false,
+          "repeatable": false,
+          "default": false,
+          "description": "Show what would change without writing"
+        }
+      ],
+      "subcommands": [],
+      "notes": [
+        "The replacement is re-indented to match the original symbol.",
+        "Function and method signatures are validated unless --no-check-signature is given."
+      ]
+    },
+    {
+      "name": "insert-before",
+      "about": "Insert new source immediately before a symbol.",
+      "usage": "leta insert-before [OPTIONS] <SYMBOL>",
+      "requires_daemon": true,
+      "requires_workspace": true,
+      "rpc_methods": ["resolve-symbol", "insert"],
+      "streaming": false,
+      "json_output": true,
+      "arguments": [
+        {
+          "name": "symbol",
+          "required": true,
+          "description": "Symbol to insert before"
+        }
+      ],
+      "options": [
+        {
+          "name": "body",
+          "short": null,
+          "long": "--body",
+          "value_name": "TEXT",
+          "takes_value": true,
+          "repeatable": false,
+          "default": null,
+          "description": "Text to insert (inline)"
+        },
+        {
+          "name": "file",
+          "short": null,
+          "long": "--file",
+          "value_name": "FILE",
+          "takes_value": true,
+          "repeatable": false,
+          "default": null,
+          "conflicts_with": "body",
+          "description": "Read text from FILE ('-' reads stdin)"
+        },
+        {
+          "name": "dry_run",
+          "short": null,
+          "long": "--dry-run",
+          "takes_value": false,
+          "repeatable": false,
+          "default": false,
+          "description": "Show what would change without writing"
+        }
+      ],
+      "subcommands": [],
+      "notes": [
+        "Text is re-indented to match the target symbol and inserted verbatim.",
+        "Include blank lines in the input if you want separation from surrounding code.",
+        "Sends RPC method `insert` with position `before`."
+      ]
+    },
+    {
+      "name": "insert-after",
+      "about": "Insert new source immediately after a symbol.",
+      "usage": "leta insert-after [OPTIONS] <SYMBOL>",
+      "requires_daemon": true,
+      "requires_workspace": true,
+      "rpc_methods": ["resolve-symbol", "insert"],
+      "streaming": false,
+      "json_output": true,
+      "arguments": [
+        {
+          "name": "symbol",
+          "required": true,
+          "description": "Symbol to insert after"
+        }
+      ],
+      "options": [
+        {
+          "name": "body",
+          "short": null,
+          "long": "--body",
+          "value_name": "TEXT",
+          "takes_value": true,
+          "repeatable": false,
+          "default": null,
+          "description": "Text to insert (inline)"
+        },
+        {
+          "name": "file",
+          "short": null,
+          "long": "--file",
+          "value_name": "FILE",
+          "takes_value": true,
+          "repeatable": false,
+          "default": null,
+          "conflicts_with": "body",
+          "description": "Read text from FILE ('-' reads stdin)"
+        },
+        {
+          "name": "dry_run",
+          "short": null,
+          "long": "--dry-run",
+          "takes_value": false,
+          "repeatable": false,
+          "default": false,
+          "description": "Show what would change without writing"
+        }
+      ],
+      "subcommands": [],
+      "notes": [
+        "Text is re-indented to match the target symbol and inserted verbatim.",
+        "Include blank lines in the input if you want separation from surrounding code.",
+        "Sends RPC method `insert` with position `after`."
+      ]
+    },
+    {
+      "name": "delete-lines",
+      "about": "Delete a range of lines within a file.",
+      "usage": "leta delete-lines [OPTIONS] <PATH> <START> [END]",
+      "requires_daemon": true,
+      "requires_workspace": true,
+      "rpc_methods": ["delete-lines"],
+      "streaming": false,
+      "json_output": true,
+      "arguments": [
+        {
+          "name": "path",
+          "required": true,
+          "description": "File to edit"
+        },
+        {
+          "name": "start",
+          "required": true,
+          "description": "First line to delete (1-based)"
+        },
+        {
+          "name": "end",
+          "required": false,
+          "description": "Last line to delete (defaults to START)"
+        }
+      ],
+      "options": [
+        {
+          "name": "dry_run",
+          "short": null,
+          "long": "--dry-run",
+          "takes_value": false,
+          "repeatable": false,
+          "default": false,
+          "description": "Show what would change without writing"
+        }
+      ],
+      "subcommands": [],
+      "notes": [
+        "Edits by line number instead of symbol name.",
+        "The workspace is resolved from the target file's path."
+      ]
+    },
+    {
+      "name": "insert-at-line",
+      "about": "Insert content at a given line in a file.",
+      "usage": "leta insert-at-line [OPTIONS] <PATH> <LINE>",
+      "requires_daemon": true,
+      "requires_workspace": true,
+      "rpc_methods": ["insert-at-line"],
+      "streaming": false,
+      "json_output": true,
+      "arguments": [
+        {
+          "name": "path",
+          "required": true,
+          "description": "File to edit"
+        },
+        {
+          "name": "line",
+          "required": true,
+          "description": "Line to insert at (1-based)"
+        }
+      ],
+      "options": [
+        {
+          "name": "body",
+          "short": null,
+          "long": "--body",
+          "value_name": "TEXT",
+          "takes_value": true,
+          "repeatable": false,
+          "default": null,
+          "description": "Text to insert (inline)"
+        },
+        {
+          "name": "file",
+          "short": null,
+          "long": "--file",
+          "value_name": "FILE",
+          "takes_value": true,
+          "repeatable": false,
+          "default": null,
+          "conflicts_with": "body",
+          "description": "Read text from FILE ('-' reads stdin)"
+        },
+        {
+          "name": "dry_run",
+          "short": null,
+          "long": "--dry-run",
+          "takes_value": false,
+          "repeatable": false,
+          "default": false,
+          "description": "Show what would change without writing"
+        }
+      ],
+      "subcommands": [],
+      "notes": [
+        "Inserts before the given line; use line_count + 1 to append.",
+        "Text is inserted verbatim with no re-indentation."
+      ]
+    },
+    {
+      "name": "replace-lines",
+      "about": "Replace a range of lines within a file with new content.",
+      "usage": "leta replace-lines [OPTIONS] <PATH> <START> [END]",
+      "requires_daemon": true,
+      "requires_workspace": true,
+      "rpc_methods": ["replace-lines"],
+      "streaming": false,
+      "json_output": true,
+      "arguments": [
+        {
+          "name": "path",
+          "required": true,
+          "description": "File to edit"
+        },
+        {
+          "name": "start",
+          "required": true,
+          "description": "First line to replace (1-based)"
+        },
+        {
+          "name": "end",
+          "required": false,
+          "description": "Last line to replace (defaults to START)"
+        }
+      ],
+      "options": [
+        {
+          "name": "body",
+          "short": null,
+          "long": "--body",
+          "value_name": "TEXT",
+          "takes_value": true,
+          "repeatable": false,
+          "default": null,
+          "description": "Replacement text (inline)"
+        },
+        {
+          "name": "file",
+          "short": null,
+          "long": "--file",
+          "value_name": "FILE",
+          "takes_value": true,
+          "repeatable": false,
+          "default": null,
+          "conflicts_with": "body",
+          "description": "Read text from FILE ('-' reads stdin)"
+        },
+        {
+          "name": "dry_run",
+          "short": null,
+          "long": "--dry-run",
+          "takes_value": false,
+          "repeatable": false,
+          "default": false,
+          "description": "Show what would change without writing"
+        }
+      ],
+      "subcommands": [],
+      "notes": [
+        "Edits by line number instead of symbol name.",
+        "Replacement text is inserted verbatim with no re-indentation."
+      ]
+    },
+    {
+      "name": "mv",
+      "about": "Move/rename a file and update all imports.",
+      "usage": "leta mv <OLD_PATH> <NEW_PATH>",
+      "requires_daemon": true,
+      "requires_workspace": true,
+      "rpc_methods": ["move-file"],
+      "streaming": false,
+      "json_output": true,
+      "arguments": [
+        {
+          "name": "old_path",
+          "required": true,
+          "description": "Old path"
+        },
+        {
+          "name": "new_path",
+          "required": true,
+          "description": "New path"
+        }
+      ],
+      "options": [],
+      "subcommands": [],
+      "notes": [
+        "OLD_PATH must already exist and is canonicalized.",
+        "NEW_PATH is resolved relative to the current directory and may not exist yet."
+      ]
+    },
+    {
+      "name": "workspace",
+      "about": "Manage workspaces.",
+      "usage": "leta workspace <COMMAND>",
+      "requires_daemon": true,
+      "requires_workspace": false,
+      "rpc_methods": ["add-workspace", "remove-workspace", "restart-workspace"],
+      "streaming": false,
+      "json_output": false,
+      "arguments": [],
+      "options": [],
+      "subcommands": [
+        {
+          "name": "add",
+          "about": "Add a workspace for LSP operations.",
+          "usage": "leta workspace add [PATH]",
+          "requires_daemon": true,
+          "requires_workspace": false,
+          "rpc_methods": ["add-workspace"],
+          "arguments": [
+            {
+              "name": "path",
+              "required": false,
+              "description": "Workspace root directory (default: current directory)"
+            }
+          ],
+          "options": [],
+          "notes": [
+            "Without PATH, the workspace root is auto-detected from the current directory.",
+            "Prints 'Added workspace: <root>' or 'Workspace already added: <root>'."
+          ]
+        },
+        {
+          "name": "remove",
+          "about": "Remove a workspace and stop its language servers.",
+          "usage": "leta workspace remove [PATH]",
+          "requires_daemon": true,
+          "requires_workspace": false,
+          "rpc_methods": ["remove-workspace"],
+          "arguments": [
+            {
+              "name": "path",
+              "required": false,
+              "description": "Workspace path (default: current directory)"
+            }
+          ],
+          "options": [],
+          "notes": []
+        },
+        {
+          "name": "restart",
+          "about": "Restart the language server for a workspace.",
+          "usage": "leta workspace restart [PATH]",
+          "requires_daemon": true,
+          "requires_workspace": false,
+          "rpc_methods": ["restart-workspace"],
+          "arguments": [
+            {
+              "name": "path",
+              "required": false,
+              "description": "Workspace path (default: current directory)"
+            }
+          ],
+          "options": [],
+          "notes": []
+        },
+        {
+          "name": "info",
+          "about": "Show workspace info for current directory.",
+          "usage": "leta workspace info",
+          "requires_daemon": false,
+          "requires_workspace": false,
+          "rpc_methods": [],
+          "arguments": [],
+          "options": [],
+          "notes": [
+            "Prints the resolved workspace root for the current directory.",
+            "Errors with 'No workspace found' when none is registered."
+          ]
+        }
+      ],
+      "notes": []
+    },
+    {
+      "name": "daemon",
+      "about": "Manage the leta daemon.",
+      "usage": "leta daemon <COMMAND>",
+      "requires_daemon": false,
+      "requires_workspace": false,
+      "rpc_methods": ["describe-session", "shutdown"],
+      "streaming": false,
+      "json_output": false,
+      "arguments": [],
+      "options": [],
+      "subcommands": [
+        {
+          "name": "info",
+          "about": "Show current daemon state.",
+          "usage": "leta daemon info [--profile]",
+          "requires_daemon": true,
+          "requires_workspace": false,
+          "rpc_methods": ["describe-session"],
+          "arguments": [],
+          "options": [
+            {
+              "name": "profile",
+              "short": null,
+              "long": "--profile",
+              "takes_value": false,
+              "repeatable": false,
+              "default": false,
+              "shadows_global": true,
+              "description": "Show startup and indexing profiling data"
+            }
+          ],
+          "notes": [
+            "This subcommand-level --profile shadows the global --profile flag.",
+            "Prints daemon PID, caches, workspaces, and optionally profiling data."
+          ]
+        },
+        {
+          "name": "restart",
+          "about": "Restart the leta daemon.",
+          "usage": "leta daemon restart",
+          "requires_daemon": false,
+          "requires_workspace": false,
+          "rpc_methods": ["shutdown"],
+          "arguments": [],
+          "options": [],
+          "notes": [
+            "Sends `shutdown` if the daemon is running, waits for the socket to disappear, then spawns a new daemon."
+          ]
+        },
+        {
+          "name": "start",
+          "about": "Start the leta daemon.",
+          "usage": "leta daemon start",
+          "requires_daemon": false,
+          "requires_workspace": false,
+          "rpc_methods": [],
+          "arguments": [],
+          "options": [],
+          "notes": [
+            "Spawns the leta-daemon process if it is not already running.",
+            "Prints 'Daemon already running' or 'Daemon started'."
+          ]
+        },
+        {
+          "name": "stop",
+          "about": "Stop the leta daemon.",
+          "usage": "leta daemon stop",
+          "requires_daemon": false,
+          "requires_workspace": false,
+          "rpc_methods": ["shutdown"],
+          "arguments": [],
+          "options": [],
+          "notes": [
+            "Prints 'Daemon is not running' when there is nothing to stop.",
+            "Prints 'Daemon stopped' after a successful shutdown request."
+          ]
+        }
+      ],
+      "notes": []
+    },
+    {
+      "name": "config",
+      "about": "Print config file location and contents.",
+      "usage": "leta config",
+      "requires_daemon": false,
+      "requires_workspace": false,
+      "rpc_methods": [],
+      "streaming": false,
+      "json_output": false,
+      "arguments": [],
+      "options": [],
+      "subcommands": [],
+      "notes": [
+        "Prints 'Config file: <path>', a blank line, then the config file contents.",
+        "Prints '(file does not exist, using defaults)' when the file is missing."
+      ]
+    },
+    {
+      "name": "help-all",
+      "about": "Print help for all commands.",
+      "usage": "leta help-all",
+      "requires_daemon": false,
+      "requires_workspace": false,
+      "rpc_methods": [],
+      "streaming": false,
+      "json_output": false,
+      "arguments": [],
+      "options": [],
+      "subcommands": [],
+      "notes": [
+        "Prints main help followed by long help for every subcommand, separated by banner rules."
+      ]
+    }
+  ],
+  "rpc": {
+    "transport": {
+      "type": "unix-socket",
+      "encoding": "newline-delimited JSON",
+      "request": "A single JSON object terminated by a newline.",
+      "response": "For non-streaming requests: one JSON object. For streaming requests: one JSON object per line until a `done` or `error` message."
+    },
+    "request": {
+      "method": "string",
+      "params": "object",
+      "profile": "boolean (default false)",
+      "stream": "boolean (default false; only honored by `grep` and `files`)"
+    },
+    "response": {
+      "success": {
+        "result": "object",
+        "profiling": "ProfilingData|null"
+      },
+      "error": {
+        "error": "string"
+      }
+    },
+    "stream_messages": {
+      "symbol": {
+        "type": "symbol",
+        "fields": "SymbolInfo"
+      },
+      "file": {
+        "type": "file",
+        "fields": "FileInfo"
+      },
+      "excluded_dir": {
+        "type": "excluded_dir",
+        "fields": {
+          "path": "string"
+        }
+      },
+      "done": {
+        "type": "done",
+        "fields": "StreamDone"
+      },
+      "error": {
+        "type": "error",
+        "fields": {
+          "message": "string"
+        }
+      }
+    },
+    "methods": [
+      {
+        "method": "grep",
+        "description": "Search symbols matching a regex pattern within a workspace.",
+        "streaming": true,
+        "params": {
+          "workspace_root": {
+            "type": "string",
+            "required": true,
+            "description": "Workspace root to search."
+          },
+          "pattern": {
+            "type": "string",
+            "required": false,
+            "default": ".*",
+            "description": "Regex matched against symbol names."
+          },
+          "kinds": {
+            "type": "string[]|null",
+            "required": false,
+            "description": "Restrict to these symbol kinds (matched case-insensitively)."
+          },
+          "case_sensitive": {
+            "type": "boolean",
+            "required": false,
+            "default": false,
+            "description": "Use case-sensitive regex matching."
+          },
+          "path_pattern": {
+            "type": "string|null",
+            "required": false,
+            "description": "Regex applied to relative file paths to include files."
+          },
+          "exclude_patterns": {
+            "type": "string[]",
+            "required": false,
+            "default": [],
+            "description": "Regexes applied to relative file paths to exclude files."
+          },
+          "limit": {
+            "type": "number",
+            "required": false,
+            "default": 500,
+            "description": "Maximum results. 0 means unlimited."
+          }
+        },
+        "result": {
+          "symbols": "SymbolInfo[]",
+          "warning": "string|null",
+          "truncated": "boolean",
+          "total_count": "number|null"
+        }
+      },
+      {
+        "method": "files",
+        "description": "List source files under a workspace or subpath with line and byte counts.",
+        "streaming": true,
+        "params": {
+          "workspace_root": {
+            "type": "string",
+            "required": true,
+            "description": "Workspace root."
+          },
+          "subpath": {
+            "type": "string|null",
+            "required": false,
+            "description": "Absolute path to restrict the listing to."
+          },
+          "exclude_patterns": {
+            "type": "string[]",
+            "required": false,
+            "default": [],
+            "description": "Regexes of paths to exclude."
+          },
+          "include_patterns": {
+            "type": "string[]",
+            "required": false,
+            "default": [],
+            "description": "Regexes of default-excluded directories to re-include."
+          },
+          "filter_pattern": {
+            "type": "string|null",
+            "required": false,
+            "description": "Regex that files must match to be listed."
+          },
+          "head": {
+            "type": "number",
+            "required": false,
+            "default": 500,
+            "description": "Maximum files. 0 means unlimited."
+          }
+        },
+        "result": {
+          "files": "map<string,FileInfo>",
+          "total_files": "number",
+          "total_bytes": "number",
+          "total_lines": "number",
+          "excluded_dirs": "string[]",
+          "truncated": "boolean"
+        }
+      },
+      {
+        "method": "show",
+        "description": "Return the source text of a symbol at a known location.",
+        "streaming": false,
+        "params": {
+          "workspace_root": {
+            "type": "string",
+            "required": true,
+            "description": "Workspace root."
+          },
+          "path": {
+            "type": "string",
+            "required": true,
+            "description": "File containing the symbol."
+          },
+          "line": {
+            "type": "number",
+            "required": true,
+            "description": "1-based line of the symbol."
+          },
+          "column": {
+            "type": "number",
+            "required": false,
+            "default": 0,
+            "description": "0-based column of the symbol."
+          },
+          "context": {
+            "type": "number",
+            "required": false,
+            "default": 0,
+            "description": "Extra lines of context around the symbol."
+          },
+          "head": {
+            "type": "number|null",
+            "required": false,
+            "description": "Maximum lines. 0 or omitted means unlimited."
+          },
+          "symbol_name": {
+            "type": "string|null",
+            "required": false,
+            "aliases": ["symbol"],
+            "description": "Symbol name, used for display and LSP hover."
+          },
+          "symbol_kind": {
+            "type": "string|null",
+            "required": false,
+            "aliases": ["kind"],
+            "description": "Symbol kind, used for LSP hover."
+          },
+          "range_start_line": {
+            "type": "number|null",
+            "required": false,
+            "description": "Known start line of the symbol range; skips resolution when present."
+          },
+          "range_end_line": {
+            "type": "number|null",
+            "required": false,
+            "description": "Known end line of the symbol range; skips resolution when present."
+          },
+          "direct_location": {
+            "type": "boolean",
+            "required": false,
+            "default": false,
+            "description": "Treat path/line/column as the exact symbol location without an LSP lookup."
+          }
+        },
+        "result": {
+          "path": "string",
+          "start_line": "number",
+          "end_line": "number",
+          "content": "string",
+          "symbol": "string|null",
+          "truncated": "boolean",
+          "total_lines": "number|null"
+        }
+      },
+      {
+        "method": "references",
+        "description": "Find all references to the symbol at a location.",
+        "streaming": false,
+        "params": {
+          "workspace_root": {
+            "type": "string",
+            "required": true,
+            "description": "Workspace root."
+          },
+          "path": {
+            "type": "string",
+            "required": true,
+            "description": "File containing the symbol."
+          },
+          "line": {
+            "type": "number",
+            "required": true,
+            "description": "1-based line of the symbol."
+          },
+          "column": {
+            "type": "number",
+            "required": false,
+            "default": 0,
+            "description": "0-based column of the symbol."
+          },
+          "context": {
+            "type": "number",
+            "required": false,
+            "default": 0,
+            "description": "Lines of context to include per location."
+          },
+          "head": {
+            "type": "number",
+            "required": false,
+            "default": 500,
+            "description": "Maximum results. 0 means unlimited."
+          }
+        },
+        "result": {
+          "locations": "LocationInfo[]",
+          "truncated": "boolean",
+          "total_count": "number|null"
+        }
+      },
+      {
+        "method": "declaration",
+        "description": "Find the declaration of the symbol at a location.",
+        "streaming": false,
+        "params": {
+          "workspace_root": {
+            "type": "string",
+            "required": true,
+            "description": "Workspace root."
+          },
+          "path": {
+            "type": "string",
+            "required": true,
+            "description": "File containing the symbol."
+          },
+          "line": {
+            "type": "number",
+            "required": true,
+            "description": "1-based line of the symbol."
+          },
+          "column": {
+            "type": "number",
+            "required": false,
+            "default": 0,
+            "description": "0-based column of the symbol."
+          },
+          "context": {
+            "type": "number",
+            "required": false,
+            "default": 0,
+            "description": "Lines of context to include per location."
+          },
+          "head": {
+            "type": "number",
+            "required": false,
+            "default": 500,
+            "description": "Maximum results. 0 means unlimited."
+          }
+        },
+        "result": {
+          "locations": "LocationInfo[]",
+          "truncated": "boolean",
+          "total_count": "number|null"
+        }
+      },
+      {
+        "method": "implementations",
+        "description": "Find implementations of the interface or abstract method at a location.",
+        "streaming": false,
+        "params": {
+          "workspace_root": {
+            "type": "string",
+            "required": true,
+            "description": "Workspace root."
+          },
+          "path": {
+            "type": "string",
+            "required": true,
+            "description": "File containing the symbol."
+          },
+          "line": {
+            "type": "number",
+            "required": true,
+            "description": "1-based line of the symbol."
+          },
+          "column": {
+            "type": "number",
+            "required": false,
+            "default": 0,
+            "description": "0-based column of the symbol."
+          },
+          "context": {
+            "type": "number",
+            "required": false,
+            "default": 0,
+            "description": "Lines of context to include per location."
+          },
+          "head": {
+            "type": "number",
+            "required": false,
+            "default": 500,
+            "description": "Maximum results. 0 means unlimited."
+          }
+        },
+        "result": {
+          "locations": "LocationInfo[]",
+          "error": "string|null",
+          "truncated": "boolean",
+          "total_count": "number|null"
+        }
+      },
+      {
+        "method": "subtypes",
+        "description": "Find direct subtypes of the type at a location.",
+        "streaming": false,
+        "params": {
+          "workspace_root": {
+            "type": "string",
+            "required": true,
+            "description": "Workspace root."
+          },
+          "path": {
+            "type": "string",
+            "required": true,
+            "description": "File containing the symbol."
+          },
+          "line": {
+            "type": "number",
+            "required": true,
+            "description": "1-based line of the symbol."
+          },
+          "column": {
+            "type": "number",
+            "required": false,
+            "default": 0,
+            "description": "0-based column of the symbol."
+          },
+          "context": {
+            "type": "number",
+            "required": false,
+            "default": 0,
+            "description": "Lines of context to include per location."
+          },
+          "head": {
+            "type": "number",
+            "required": false,
+            "default": 500,
+            "description": "Maximum results. 0 means unlimited."
+          }
+        },
+        "result": {
+          "locations": "LocationInfo[]",
+          "truncated": "boolean",
+          "total_count": "number|null"
+        }
+      },
+      {
+        "method": "supertypes",
+        "description": "Find direct supertypes of the type at a location.",
+        "streaming": false,
+        "params": {
+          "workspace_root": {
+            "type": "string",
+            "required": true,
+            "description": "Workspace root."
+          },
+          "path": {
+            "type": "string",
+            "required": true,
+            "description": "File containing the symbol."
+          },
+          "line": {
+            "type": "number",
+            "required": true,
+            "description": "1-based line of the symbol."
+          },
+          "column": {
+            "type": "number",
+            "required": false,
+            "default": 0,
+            "description": "0-based column of the symbol."
+          },
+          "context": {
+            "type": "number",
+            "required": false,
+            "default": 0,
+            "description": "Lines of context to include per location."
+          },
+          "head": {
+            "type": "number",
+            "required": false,
+            "default": 500,
+            "description": "Maximum results. 0 means unlimited."
+          }
+        },
+        "result": {
+          "locations": "LocationInfo[]",
+          "truncated": "boolean",
+          "total_count": "number|null"
+        }
+      },
+      {
+        "method": "calls",
+        "description": "Return outgoing calls, incoming calls, or the call path between two symbols.",
+        "streaming": false,
+        "params": {
+          "workspace_root": {
+            "type": "string",
+            "required": true,
+            "description": "Workspace root."
+          },
+          "mode": {
+            "type": "string",
+            "required": true,
+            "enum": ["outgoing", "incoming", "path"],
+            "description": "Direction of the call hierarchy query."
+          },
+          "from_path": {
+            "type": "string|null",
+            "required": false,
+            "description": "File containing the source symbol."
+          },
+          "from_line": {
+            "type": "number|null",
+            "required": false,
+            "description": "1-based line of the source symbol."
+          },
+          "from_column": {
+            "type": "number|null",
+            "required": false,
+            "description": "0-based column of the source symbol."
+          },
+          "from_symbol": {
+            "type": "string|null",
+            "required": false,
+            "description": "Source symbol name, used for display."
+          },
+          "to_path": {
+            "type": "string|null",
+            "required": false,
+            "description": "File containing the target symbol."
+          },
+          "to_line": {
+            "type": "number|null",
+            "required": false,
+            "description": "1-based line of the target symbol."
+          },
+          "to_column": {
+            "type": "number|null",
+            "required": false,
+            "description": "0-based column of the target symbol."
+          },
+          "to_symbol": {
+            "type": "string|null",
+            "required": false,
+            "description": "Target symbol name, used for display."
+          },
+          "max_depth": {
+            "type": "number",
+            "required": false,
+            "default": 3,
+            "description": "Maximum recursion depth."
+          },
+          "include_non_workspace": {
+            "type": "boolean",
+            "required": false,
+            "default": false,
+            "description": "Include stdlib and dependency calls."
+          },
+          "head": {
+            "type": "number",
+            "required": false,
+            "default": 500,
+            "description": "Maximum results. 0 means unlimited."
+          }
+        },
+        "result": {
+          "root": "CallNode|null",
+          "path": "CallNode[]|null",
+          "message": "string|null",
+          "error": "string|null",
+          "truncated": "boolean"
+        }
+      },
+      {
+        "method": "graph",
+        "description": "Return the full workspace call graph as nodes and edges.",
+        "streaming": false,
+        "params": {
+          "workspace_root": {
+            "type": "string",
+            "required": true,
+            "description": "Workspace root."
+          },
+          "include_non_workspace": {
+            "type": "boolean",
+            "required": false,
+            "default": false,
+            "description": "Include stdlib and dependency calls."
+          },
+          "exclude_patterns": {
+            "type": "string[]",
+            "required": false,
+            "default": [],
+            "description": "Regexes of paths to exclude."
+          },
+          "include_patterns": {
+            "type": "string[]",
+            "required": false,
+            "default": [],
+            "description": "Regexes of paths to include; when non-empty, only matching paths are used."
+          },
+          "include_tests": {
+            "type": "boolean",
+            "required": false,
+            "default": false,
+            "description": "Include test files."
+          }
+        },
+        "result": {
+          "nodes": "CallGraphSymbol[]",
+          "edges": "CallGraphEdge[]",
+          "indexing_time_ms": "number|null",
+          "error": "string|null"
+        }
+      },
+      {
+        "method": "rename",
+        "description": "Rename the symbol at a location across the workspace.",
+        "streaming": false,
+        "params": {
+          "workspace_root": {
+            "type": "string",
+            "required": true,
+            "description": "Workspace root."
+          },
+          "path": {
+            "type": "string",
+            "required": true,
+            "description": "File containing the symbol."
+          },
+          "line": {
+            "type": "number",
+            "required": true,
+            "description": "1-based line of the symbol."
+          },
+          "column": {
+            "type": "number",
+            "required": false,
+            "default": 0,
+            "description": "0-based column of the symbol."
+          },
+          "new_name": {
+            "type": "string",
+            "required": true,
+            "description": "New symbol name."
+          }
+        },
+        "result": {
+          "files_changed": "string[]"
+        }
+      },
+      {
+        "method": "replace",
+        "description": "Replace the body of a symbol definition with new source text.",
+        "streaming": false,
+        "params": {
+          "workspace_root": {
+            "type": "string",
+            "required": true,
+            "description": "Workspace root."
+          },
+          "path": {
+            "type": "string",
+            "required": true,
+            "description": "File containing the symbol."
+          },
+          "line": {
+            "type": "number",
+            "required": true,
+            "description": "1-based line of the symbol."
+          },
+          "column": {
+            "type": "number",
+            "required": false,
+            "default": 0,
+            "description": "0-based column of the symbol."
+          },
+          "symbol_name": {
+            "type": "string|null",
+            "required": false,
+            "aliases": ["symbol"],
+            "description": "Symbol name, used for display and validation."
+          },
+          "symbol_kind": {
+            "type": "string|null",
+            "required": false,
+            "aliases": ["kind"],
+            "description": "Symbol kind, used for validation."
+          },
+          "range_start_line": {
+            "type": "number|null",
+            "required": false,
+            "description": "Known start line of the symbol range."
+          },
+          "range_end_line": {
+            "type": "number|null",
+            "required": false,
+            "description": "Known end line of the symbol range."
+          },
+          "new_text": {
+            "type": "string",
+            "required": true,
+            "description": "Replacement source text; re-indented to match the original."
+          },
+          "check_signature": {
+            "type": "boolean",
+            "required": false,
+            "default": true,
+            "description": "Validate that the function or method signature is unchanged."
+          },
+          "dry_run": {
+            "type": "boolean",
+            "required": false,
+            "default": false,
+            "description": "Report the change without writing it."
+          }
+        },
+        "result": {
+          "replaced": "boolean",
+          "path": "string",
+          "old_start_line": "number",
+          "old_end_line": "number",
+          "new_start_line": "number",
+          "new_end_line": "number",
+          "new_line_count": "number",
+          "dry_run": "boolean"
+        }
+      },
+      {
+        "method": "insert",
+        "description": "Insert new source immediately before or after a symbol definition.",
+        "streaming": false,
+        "params": {
+          "workspace_root": {
+            "type": "string",
+            "required": true,
+            "description": "Workspace root."
+          },
+          "path": {
+            "type": "string",
+            "required": true,
+            "description": "File containing the symbol."
+          },
+          "line": {
+            "type": "number",
+            "required": true,
+            "description": "1-based line of the symbol."
+          },
+          "column": {
+            "type": "number",
+            "required": false,
+            "default": 0,
+            "description": "0-based column of the symbol."
+          },
+          "symbol_name": {
+            "type": "string|null",
+            "required": false,
+            "aliases": ["symbol"],
+            "description": "Symbol name, used for display."
+          },
+          "symbol_kind": {
+            "type": "string|null",
+            "required": false,
+            "aliases": ["kind"],
+            "description": "Symbol kind, used for display."
+          },
+          "range_start_line": {
+            "type": "number|null",
+            "required": false,
+            "description": "Known start line of the symbol range."
+          },
+          "range_end_line": {
+            "type": "number|null",
+            "required": false,
+            "description": "Known end line of the symbol range."
+          },
+          "new_text": {
+            "type": "string",
+            "required": true,
+            "description": "Source text to insert; re-indented to match the target symbol."
+          },
+          "position": {
+            "type": "string",
+            "required": true,
+            "enum": ["before", "after"],
+            "description": "Insert before or after the symbol."
+          },
+          "dry_run": {
+            "type": "boolean",
+            "required": false,
+            "default": false,
+            "description": "Report the change without writing it."
+          }
+        },
+        "result": {
+          "inserted": "boolean",
+          "path": "string",
+          "position": "string",
+          "insert_line": "number",
+          "new_line_count": "number",
+          "dry_run": "boolean"
+        }
+      },
+      {
+        "method": "delete-lines",
+        "description": "Delete an inclusive range of lines from a file.",
+        "streaming": false,
+        "params": {
+          "workspace_root": {
+            "type": "string",
+            "required": true,
+            "description": "Workspace root."
+          },
+          "path": {
+            "type": "string",
+            "required": true,
+            "description": "File to edit."
+          },
+          "start_line": {
+            "type": "number",
+            "required": true,
+            "description": "First line to delete (1-based)."
+          },
+          "end_line": {
+            "type": "number",
+            "required": true,
+            "description": "Last line to delete (1-based, inclusive)."
+          },
+          "dry_run": {
+            "type": "boolean",
+            "required": false,
+            "default": false,
+            "description": "Report the change without writing it."
+          }
+        },
+        "result": {
+          "deleted": "boolean",
+          "path": "string",
+          "start_line": "number",
+          "end_line": "number",
+          "deleted_line_count": "number",
+          "dry_run": "boolean"
+        }
+      },
+      {
+        "method": "insert-at-line",
+        "description": "Insert text at a given line in a file.",
+        "streaming": false,
+        "params": {
+          "workspace_root": {
+            "type": "string",
+            "required": true,
+            "description": "Workspace root."
+          },
+          "path": {
+            "type": "string",
+            "required": true,
+            "description": "File to edit."
+          },
+          "line": {
+            "type": "number",
+            "required": true,
+            "description": "Line to insert at (1-based); text is placed before this line."
+          },
+          "new_text": {
+            "type": "string",
+            "required": true,
+            "description": "Text to insert verbatim."
+          },
+          "dry_run": {
+            "type": "boolean",
+            "required": false,
+            "default": false,
+            "description": "Report the change without writing it."
+          }
+        },
+        "result": {
+          "inserted": "boolean",
+          "path": "string",
+          "insert_line": "number",
+          "new_line_count": "number",
+          "dry_run": "boolean"
+        }
+      },
+      {
+        "method": "replace-lines",
+        "description": "Replace an inclusive range of lines in a file with new text.",
+        "streaming": false,
+        "params": {
+          "workspace_root": {
+            "type": "string",
+            "required": true,
+            "description": "Workspace root."
+          },
+          "path": {
+            "type": "string",
+            "required": true,
+            "description": "File to edit."
+          },
+          "start_line": {
+            "type": "number",
+            "required": true,
+            "description": "First line to replace (1-based)."
+          },
+          "end_line": {
+            "type": "number",
+            "required": true,
+            "description": "Last line to replace (1-based, inclusive)."
+          },
+          "new_text": {
+            "type": "string",
+            "required": true,
+            "description": "Replacement text, inserted verbatim."
+          },
+          "dry_run": {
+            "type": "boolean",
+            "required": false,
+            "default": false,
+            "description": "Report the change without writing it."
+          }
+        },
+        "result": {
+          "replaced": "boolean",
+          "path": "string",
+          "start_line": "number",
+          "end_line": "number",
+          "new_start_line": "number",
+          "new_end_line": "number",
+          "new_line_count": "number",
+          "dry_run": "boolean"
+        }
+      },
+      {
+        "method": "move-file",
+        "description": "Move or rename a file and update imports that reference it.",
+        "streaming": false,
+        "params": {
+          "workspace_root": {
+            "type": "string",
+            "required": true,
+            "description": "Workspace root."
+          },
+          "old_path": {
+            "type": "string",
+            "required": true,
+            "description": "Existing absolute path of the file."
+          },
+          "new_path": {
+            "type": "string",
+            "required": true,
+            "description": "Destination absolute path."
+          }
+        },
+        "result": {
+          "files_changed": "string[]",
+          "imports_updated": "boolean"
+        }
+      },
+      {
+        "method": "resolve-symbol",
+        "description": "Resolve a user-supplied symbol string to a concrete file location.",
+        "streaming": false,
+        "params": {
+          "workspace_root": {
+            "type": "string",
+            "required": true,
+            "description": "Workspace root."
+          },
+          "symbol_path": {
+            "type": "string",
+            "required": true,
+            "description": "Symbol expression: Name, Parent.Name, path:Name, or path:Parent.Name."
+          }
+        },
+        "result": {
+          "path": "string|null",
+          "line": "number|null",
+          "column": "number|null",
+          "name": "string|null",
+          "kind": "string|null",
+          "container": "string|null",
+          "range_start_line": "number|null",
+          "range_end_line": "number|null",
+          "error": "string|null",
+          "matches": "SymbolInfo[]|null",
+          "total_matches": "number|null"
+        }
+      },
+      {
+        "method": "add-workspace",
+        "description": "Register a workspace with the daemon and start its language servers.",
+        "streaming": false,
+        "params": {
+          "workspace_root": {
+            "type": "string",
+            "required": true,
+            "description": "Absolute workspace root to add."
+          }
+        },
+        "result": {
+          "added": "boolean",
+          "workspace_root": "string",
+          "message": "string"
+        }
+      },
+      {
+        "method": "remove-workspace",
+        "description": "Unregister a workspace and stop its language servers.",
+        "streaming": false,
+        "params": {
+          "workspace_root": {
+            "type": "string",
+            "required": true,
+            "description": "Absolute workspace root to remove."
+          }
+        },
+        "result": {
+          "servers_stopped": "string[]"
+        }
+      },
+      {
+        "method": "restart-workspace",
+        "description": "Restart the language servers for a workspace.",
+        "streaming": false,
+        "params": {
+          "workspace_root": {
+            "type": "string",
+            "required": true,
+            "description": "Absolute workspace root to restart."
+          }
+        },
+        "result": {
+          "restarted": "string[]"
+        }
+      },
+      {
+        "method": "describe-session",
+        "description": "Return daemon state: PID, caches, and workspaces.",
+        "streaming": false,
+        "params": {
+          "include_profiling": {
+            "type": "boolean",
+            "required": false,
+            "default": false,
+            "description": "Include startup and indexing profiling data."
+          }
+        },
+        "result": {
+          "daemon_pid": "number",
+          "caches": "map<string,CacheInfo>",
+          "workspaces": "WorkspaceInfo[]",
+          "profiling": "WorkspaceProfilingData[]|null"
+        }
+      },
+      {
+        "method": "shutdown",
+        "description": "Stop the daemon gracefully.",
+        "streaming": false,
+        "params": {},
+        "result": {
+          "status": "string"
+        }
+      }
+    ]
+  }
+}
